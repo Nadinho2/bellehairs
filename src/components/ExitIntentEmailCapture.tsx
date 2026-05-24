@@ -1,20 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import EmailCaptureModal from "@/components/EmailCaptureModal";
 import { getCookie, setCookie } from "@/lib/cookies";
+import { hasSubscriberEmail } from "@/lib/emails";
 
 const SUBSCRIBED_COOKIE = "bh_email_subscribed";
 
 function isSubscribed() {
-  return getCookie(SUBSCRIBED_COOKIE) === "1";
+  return getCookie(SUBSCRIBED_COOKIE) === "1" || hasSubscriberEmail();
 }
 
 export default function ExitIntentEmailCapture() {
   const [open, setOpen] = useState(false);
 
-  const shouldDisable = useMemo(() => isSubscribed(), []);
+  const shouldDisable = isSubscribed();
 
   useEffect(() => {
     if (shouldDisable) return;
@@ -78,4 +79,3 @@ export default function ExitIntentEmailCapture() {
     />
   );
 }
-

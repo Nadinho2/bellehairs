@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { useAdminAuth } from "@/lib/admin-auth";
-import { useEmailList } from "@/lib/emails";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { SubscriberRow } from "@/lib/supabase/types";
 
-function formatDate(ms: number) {
+function formatDate(iso: string) {
   try {
-    return new Date(ms).toLocaleString("en-NG", {
+    return new Date(iso).toLocaleString("en-NG", {
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -16,53 +16,49 @@ function formatDate(ms: number) {
       minute: "2-digit",
     });
   } catch {
-    return String(ms);
+    return iso;
   }
 }
 
+function toCsv(rows: SubscriberRow[]) {
+  const header = ["email", "date", "source"].join(",");
+  const lines = rows.map((r) => {
+    const email = `"${r.email.replaceAll('"', '""')}"`;
+    const date = `"${r.created_at}"`;
+    const source = `"${String(r.source).replaceAll('"', '""')}"`;
+    return [email, date, source].join(",");
+  });
+  return [header, ...lines].join("\n");
+}
+
 export default function EmailListAdminPage() {
-  const auth = useAdminAuth();
-  const emailList = useEmailList();
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const [rows, setRows] = useState<SubscriberRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase
+      .from("subscribers")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => setRows((data ?? []) as SubscriberRow[]))
+      .finally(() => setLoading(false));
+  }, [supabase]);
 
   const counts = useMemo(() => {
-    const bySource = new Map<string, number>();
-    for (const e of emailList.entries) {
-      bySource.set(e.source, (bySource.get(e.source) ?? 0) + 1);
-    }
-    return bySource;
-  }, [emailList.entries]);
-
-  if (!auth.isAuthed) {
-    return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-12">
-        <div className="rounded-3xl border border-border bg-card p-10 text-center text-white">
-          <h1 className="text-2xl font-semibold tracking-tight text-white">
-            Admin login required
-          </h1>
-          <p className="mt-2 text-sm text-white/70">
-            Please login to view the email list.
-          </p>
-          <Link
-            href="/admin"
-            className="mt-6 inline-flex items-center justify-center rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
-          >
-            Go to Admin Login
-          </Link>
-        </div>
-      </div>
-    );
-  }
+    const map = new Map<string, number>();
+    for (const r of rows) map.set(r.source, (map.get(r.source) ?? 0) + 1);
+    return map;
+  }, [rows]);
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-12">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-2">
           <p className="text-xs font-semibold text-brand">Admin</p>
-          <h1 className="text-4xl font-semibold tracking-tight text-foreground">
-            Email List
-          </h1>
+          <h1 className="text-4xl font-semibold tracking-tight text-foreground">Email List</h1>
           <p className="text-sm text-foreground/70">
-            Emails collected from popups, footer, and checkout.
+            Emails collected from popups, footer, checkout, and exit intent.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -74,7 +70,18 @@ export default function EmailListAdminPage() {
           </Link>
           <button
             type="button"
-            onClick={() => emailList.downloadCsv()}
+            onClick={() => {
+              const csv = toCsv(rows);
+              const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `bellehairs-email-list-${new Date().toISOString().slice(0, 10)}.csv`;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              URL.revokeObjectURL(url);
+            }}
             className="inline-flex items-center justify-center rounded-full bg-brand px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
           >
             Export as CSV
@@ -92,7 +99,7 @@ export default function EmailListAdminPage() {
           </span>
         ))}
         <span className="rounded-full border border-black/10 bg-white px-4 py-2 font-semibold text-black">
-          Total: {emailList.entries.length}
+          Total: {rows.length}
         </span>
       </div>
 
@@ -104,25 +111,16 @@ export default function EmailListAdminPage() {
         </div>
 
         <div className="divide-y divide-white/10">
-          {emailList.entries.length === 0 ? (
-            <div className="px-5 py-10 text-center text-white/70">
-              No emails collected yet.
-            </div>
+          {loading ? (
+            <div className="px-5 py-10 text-center text-white/70">Loading…</div>
+          ) : rows.length === 0 ? (
+            <div className="px-5 py-10 text-center text-white/70">No emails collected yet.</div>
           ) : (
-            emailList.entries.map((e) => (
-              <div
-                key={e.id}
-                className="grid grid-cols-12 gap-3 px-5 py-4 text-sm text-white"
-              >
-                <div className="col-span-12 break-all font-semibold sm:col-span-6">
-                  {e.email}
-                </div>
-                <div className="col-span-6 text-white/80 sm:col-span-3">
-                  {e.source}
-                </div>
-                <div className="col-span-6 text-white/80 sm:col-span-3">
-                  {formatDate(e.createdAt)}
-                </div>
+            rows.map((r) => (
+              <div key={r.id} className="grid grid-cols-12 gap-3 px-5 py-4 text-sm text-white">
+                <div className="col-span-12 break-all font-semibold sm:col-span-6">{r.email}</div>
+                <div className="col-span-6 text-white/80 sm:col-span-3">{r.source}</div>
+                <div className="col-span-6 text-white/80 sm:col-span-3">{formatDate(r.created_at)}</div>
               </div>
             ))
           )}

@@ -4,15 +4,14 @@ import { useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import ProductCard from "@/components/ProductCard";
-import { categories } from "@/data/products";
-import { useCatalog } from "@/lib/catalog";
 import { useWishlist } from "@/lib/wishlist";
-import type { HairType, ProductCategory } from "@/types/product";
+import type { HairType, Product, ProductCategory } from "@/types/product";
 
-export default function ProductsClient() {
+const CATEGORY_OPTIONS: ProductCategory[] = ["Wigs", "Weavon", "Accessories"];
+
+export default function ProductsClient(props: { products: Product[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { products } = useCatalog();
   const wishlist = useWishlist();
 
   const selectedCategory = (searchParams.get("category") ||
@@ -27,16 +26,16 @@ export default function ProductsClient() {
 
   const filtered = useMemo(() => {
     const query = q.toLowerCase();
-    return products.filter((p) => {
+    return props.products.filter((p) => {
       const groupOk =
         !group ||
         (group === "wigs"
           ? p.category === "Wigs"
           : group === "weavon"
-            ? p.category === "Bundles" ||
-              p.category === "Closures" ||
-              p.category === "Frontals"
-            : true);
+            ? p.category === "Weavon"
+            : group === "accessories"
+              ? p.category === "Accessories"
+              : true);
 
       const categoryOk =
         selectedCategory === "All" || p.category === selectedCategory;
@@ -67,7 +66,7 @@ export default function ProductsClient() {
     featuredOnly,
     group,
     hairType,
-    products,
+    props.products,
     q,
     selectedCategory,
     wishlistOnly,
@@ -90,7 +89,7 @@ export default function ProductsClient() {
             Shop
           </h1>
           <p className="text-sm text-foreground/70">
-            Wigs, bundles, closures, and frontals — premium quality hair.
+            Wigs, weavon, and accessories — premium quality hair.
           </p>
         </div>
 
@@ -138,7 +137,7 @@ export default function ProductsClient() {
             aria-label="Filter by category"
           >
             <option value="All">All categories</option>
-            {categories.map((c) => (
+            {CATEGORY_OPTIONS.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>

@@ -2,50 +2,101 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
-import { useAdminAuth } from "@/lib/admin-auth";
-import {
-  buildVariantsFromLengths,
-  HAIR_TYPE_OPTIONS,
-  LENGTH_OPTIONS,
-  makeIdFromName,
-  PRODUCT_CATEGORIES,
-  saveCatalogToStorage,
-  TEXTURE_OPTIONS,
-  useCatalog,
-} from "@/lib/catalog";
-import { useSocialFeed } from "@/lib/socialFeed";
-import type { HairType, Product, ProductCategory } from "@/types/product";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { DbHairType, DbProductCategory, DbTexture, ProductRow, SocialFeedRow } from "@/lib/supabase/types";
+
+const LENGTH_OPTIONS = [10, 12, 14, 16, 18, 20, 22, 24, 26] as const;
+const CATEGORY_OPTIONS: DbProductCategory[] = ["Wigs", "Weavon", "Accessories"];
+const HAIR_TYPE_OPTIONS: DbHairType[] = ["Human Hair", "Vietnamese Hair", "Blend Hair"];
+const TEXTURE_OPTIONS: DbTexture[] = [
+  "Straight",
+  "Bone Straight",
+  "Curly",
+  "Pixie Curl",
+  "Jerry Curl",
+  "Burmese Curl",
+];
+const CLOSURE_OPTIONS = ["2x4", "2x6", "4x4", "5x5", "Full Frontal", "T-Frontal"] as const;
+
+async function uploadPublicImage(params: {
+  bucket: string;
+  path: string;
+  file: File;
+}) {
+  const supabase = createSupabaseBrowserClient();
+  const { error } = await supabase.storage.from(params.bucket).upload(params.path, params.file, {
+    upsert: true,
+    contentType: params.file.type,
+    cacheControl: "3600",
+  });
+  if (error) throw error;
+  const { data } = supabase.storage.from(params.bucket).getPublicUrl(params.path);
+  return data.publicUrl;
+}
 
 export default function AdminPage() {
-  const auth = useAdminAuth();
-  const catalog = useCatalog();
-  const socialFeed = useSocialFeed();
+  const router = useRouter();
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
-  const [loginUsername, setLoginUsername] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
-  const [loginError, setLoginError] = useState<string | null>(null);
+  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [social, setSocial] = useState<SocialFeedRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [category, setCategory] = useState<ProductCategory>("Wigs");
+  const [category, setCategory] = useState<DbProductCategory>("Wigs");
   const [price, setPrice] = useState<string>("");
   const [lengths, setLengths] = useState<number[]>([]);
-  const [hairType, setHairType] = useState<HairType>(HAIR_TYPE_OPTIONS[0]);
-  const [texture, setTexture] = useState<string>(TEXTURE_OPTIONS[0]);
+  const [hairType, setHairType] = useState<DbHairType>("Human Hair");
+  const [texture, setTexture] = useState<DbTexture>("Straight");
+  const [closureType, setClosureType] = useState<string>("");
+  const [accessoryType, setAccessoryType] = useState<string>("");
   const [inStock, setInStock] = useState(true);
+  const [isNewArrival, setIsNewArrival] = useState(true);
   const [isBestSeller, setIsBestSeller] = useState(false);
   const [isFeatured, setIsFeatured] = useState(false);
   const [images, setImages] = useState<string[]>([]);
   const [description, setDescription] = useState("");
 
+  const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
 
-  const sortedProducts = useMemo(() => {
-    return [...catalog.products].sort((a, b) => a.name.localeCompare(b.name));
-  }, [catalog.products]);
+  const socialBySlot = useMemo(() => {
+    const map = new Map<number, SocialFeedRow>();
+    for (const row of social) map.set(row.slot_number, row);
+    return map;
+  }, [social]);
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [{ data: productData, error: productError }, { data: socialData, error: socialError }] =
+        await Promise.all([
+          supabase.from("products").select("*").order("created_at", { ascending: false }),
+          supabase.from("social_feed").select("*").order("slot_number", { ascending: true }),
+        ]);
+      if (productError) throw productError;
+      if (socialError) throw socialError;
+      setProducts((productData ?? []) as ProductRow[]);
+      setSocial((socialData ?? []) as SocialFeedRow[]);
+    } catch (e) {
+      setError((e as Error).message || "Failed to load admin data.");
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      void loadAll();
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [loadAll]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -53,105 +104,52 @@ export default function AdminPage() {
     setCategory("Wigs");
     setPrice("");
     setLengths([]);
-    setHairType(HAIR_TYPE_OPTIONS[0]);
-    setTexture(TEXTURE_OPTIONS[0]);
+    setHairType("Human Hair");
+    setTexture("Straight");
+    setClosureType("");
+    setAccessoryType("");
     setInStock(true);
+    setIsNewArrival(true);
     setIsBestSeller(false);
     setIsFeatured(false);
     setImages([]);
     setDescription("");
     setFormError(null);
-    setSaved(false);
   };
 
-  const startEdit = (p: Product) => {
+  const startEdit = (p: ProductRow) => {
     setEditingId(p.id);
     setName(p.name);
     setCategory(p.category);
     setPrice(String(p.price));
     setLengths(
-      p.variants?.length
-        ? p.variants.map((v) => v.lengthInches)
-        : LENGTH_OPTIONS.slice(0, 1).map((n) => n),
+      (p.lengths ?? [])
+        .map((v) => Number(String(v).replace(/[^\d]/g, "")))
+        .filter((n) => Number.isFinite(n) && n > 0),
     );
-    setHairType(p.hairType ?? HAIR_TYPE_OPTIONS[0]);
-    setTexture(p.texture ?? TEXTURE_OPTIONS[0]);
-    setInStock(p.inStock !== false);
-    setIsBestSeller(p.isBestSeller === true);
-    setIsFeatured(p.isFeatured === true);
-    setImages(p.images?.length ? p.images : [p.image].filter(Boolean));
+    setHairType((p.hair_type ?? "Human Hair") as DbHairType);
+    setTexture((p.texture ?? "Straight") as DbTexture);
+    setClosureType(p.closure_type ?? "");
+    setAccessoryType(p.accessory_type ?? "");
+    setInStock(p.in_stock !== false);
+    setIsNewArrival(p.is_new_arrival === true);
+    setIsBestSeller(p.is_best_seller === true);
+    setIsFeatured(p.is_featured === true);
+    setImages(p.images ?? []);
     setDescription(p.description ?? "");
     setFormError(null);
-    setSaved(false);
   };
 
-  if (!auth.isAuthed) {
+  const onLogout = async () => {
+    await supabase.auth.signOut();
+    router.replace("/admin/login");
+  };
+
+  if (loading) {
     return (
-      <div className="mx-auto w-full max-w-md px-4 py-12">
-        <div className="rounded-3xl border border-border bg-card p-8 text-white">
-          <p className="text-xs font-semibold text-brand">Admin</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">
-            Login
-          </h1>
-          <p className="mt-2 text-sm text-white/70">
-            Enter your admin username and password.
-          </p>
-
-          <form
-            className="mt-6 space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const result = auth.login(loginUsername, loginPassword);
-              if (!result.ok) {
-                setLoginError(result.message);
-                return;
-              }
-              setLoginError(null);
-              setLoginUsername("");
-              setLoginPassword("");
-            }}
-          >
-            <label className="block space-y-2">
-              <span className="text-sm font-semibold text-white">Username</span>
-              <input
-                value={loginUsername}
-                onChange={(e) => setLoginUsername(e.target.value)}
-                className="h-11 w-full rounded-2xl border border-white/15 bg-black/40 px-4 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40"
-                autoComplete="username"
-                required
-              />
-            </label>
-
-            <label className="block space-y-2">
-              <span className="text-sm font-semibold text-white">Password</span>
-              <input
-                type="password"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                className="h-11 w-full rounded-2xl border border-white/15 bg-black/40 px-4 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40"
-                autoComplete="current-password"
-                required
-              />
-            </label>
-
-            {loginError ? (
-              <p className="text-sm text-white/80">{loginError}</p>
-            ) : null}
-
-            <button
-              type="submit"
-              className="inline-flex w-full items-center justify-center rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
-            >
-              Login
-            </button>
-
-            <Link
-              href="/"
-              className="inline-flex w-full items-center justify-center rounded-full border border-black bg-white px-6 py-3 text-sm font-semibold text-black hover:border-brand"
-            >
-              Back to site
-            </Link>
-          </form>
+      <div className="mx-auto w-full max-w-6xl px-4 py-12">
+        <div className="rounded-3xl border border-border bg-card p-10 text-white">
+          <p className="text-sm text-white/70">Loading admin…</p>
         </div>
       </div>
     );
@@ -163,12 +161,12 @@ export default function AdminPage() {
         <div className="space-y-2">
           <p className="text-xs font-semibold text-brand">Admin</p>
           <h1 className="text-4xl font-semibold tracking-tight text-foreground">
-            Product Upload
+            Dashboard
           </h1>
           <p className="text-sm text-foreground/70">
-            Add, edit, or delete products. Changes reflect immediately on the Shop
-            page.
+            Manage products and homepage social feed.
           </p>
+          {error ? <p className="text-sm font-semibold text-brand">{error}</p> : null}
         </div>
         <div className="flex flex-wrap gap-3">
           <Link
@@ -176,6 +174,24 @@ export default function AdminPage() {
             className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
           >
             View shop
+          </Link>
+          <Link
+            href="/admin/banners"
+            className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
+          >
+            Banners
+          </Link>
+          <Link
+            href="/admin/orders"
+            className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
+          >
+            Orders
+          </Link>
+          <Link
+            href="/admin/reviews"
+            className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
+          >
+            Reviews
           </Link>
           <Link
             href="/admin/emails"
@@ -191,10 +207,7 @@ export default function AdminPage() {
           </Link>
           <button
             type="button"
-            onClick={() => {
-              auth.logout();
-              resetForm();
-            }}
+            onClick={() => onLogout()}
             className="inline-flex items-center justify-center rounded-full bg-brand px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
           >
             Logout
@@ -221,99 +234,77 @@ export default function AdminPage() {
 
           <form
             className="mt-4 space-y-4"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
               setFormError(null);
-              setSaved(false);
+              setSaving(true);
+              try {
+                const trimmedName = name.trim();
+                if (!trimmedName) throw new Error("Product name is required.");
+                const parsedPrice = Number(price);
+                if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+                  throw new Error("Enter a valid price.");
+                }
+                if (images.length === 0) throw new Error("Upload at least one product image.");
 
-              const trimmedName = name.trim();
-              if (!trimmedName) {
-                setFormError("Product name is required.");
-                return;
+                const id = editingId ?? crypto.randomUUID();
+                const payload = {
+                  id,
+                  name: trimmedName,
+                  category,
+                  hair_type: hairType,
+                  texture,
+                  closure_type: category === "Weavon" ? (closureType || null) : null,
+                  accessory_type: category === "Accessories" ? (accessoryType || null) : null,
+                  lengths: lengths.map((n) => `${n}"`),
+                  price: parsedPrice,
+                  description: description.trim(),
+                  images,
+                  in_stock: inStock,
+                  is_new_arrival: isNewArrival,
+                  is_best_seller: isBestSeller,
+                  is_featured: isFeatured,
+                };
+
+                if (editingId) {
+                  const { error } = await supabase.from("products").update(payload).eq("id", id);
+                  if (error) throw error;
+                } else {
+                  const { error } = await supabase.from("products").insert(payload);
+                  if (error) throw error;
+                  setEditingId(id);
+                }
+                await loadAll();
+              } catch (e2) {
+                setFormError((e2 as Error).message || "Failed to save product.");
+              } finally {
+                setSaving(false);
               }
-
-              const parsedPrice = Number(price);
-              if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
-                setFormError("Enter a valid price.");
-                return;
-              }
-
-              if (!images.length) {
-                setFormError("Please upload at least one product image.");
-                return;
-              }
-
-              const selectedLengths = lengths.length ? lengths : [];
-              const variants = selectedLengths.length
-                ? buildVariantsFromLengths(selectedLengths, parsedPrice)
-                : undefined;
-
-              const nextId = editingId ?? makeIdFromName(trimmedName);
-              const now = Date.now();
-              const prev = catalog.products.find((p) => p.id === nextId);
-              const createdAt =
-                typeof prev?.createdAt === "number" ? prev.createdAt : now;
-
-              const nextProduct: Product = {
-                id: nextId,
-                name: trimmedName,
-                category,
-                price: parsedPrice,
-                variants,
-                hairType,
-                texture: texture || undefined,
-                inStock,
-                isBestSeller,
-                isFeatured,
-                createdAt,
-                updatedAt: now,
-                description: description.trim(),
-                image: images[0],
-                images,
-              };
-
-              const nextProducts = (() => {
-                const existing = catalog.products;
-                const idx = existing.findIndex((p) => p.id === nextId);
-                if (idx === -1) return [nextProduct, ...existing];
-                const copy = [...existing];
-                copy[idx] = nextProduct;
-                return copy;
-              })();
-
-              saveCatalogToStorage(nextProducts);
-              setSaved(true);
-              setEditingId(nextId);
             }}
           >
             <div className="grid gap-4 sm:grid-cols-2">
-              <TextField
-                label="Product Name"
-                value={name}
-                onChange={setName}
-                required
-              />
+              <TextField label="Product Name" value={name} onChange={setName} required />
+
               <SelectField
                 label="Product Category"
                 value={category}
-                onChange={(v) => setCategory(v as ProductCategory)}
+                onChange={(v) => setCategory(v as DbProductCategory)}
                 required
               >
-                {PRODUCT_CATEGORIES.map((c) => (
+                {CATEGORY_OPTIONS.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
                 ))}
               </SelectField>
 
-              <NumberField
-                label="Price (₦)"
-                value={price}
-                onChange={setPrice}
-                required
-              />
+              <NumberField label="Price (₦)" value={price} onChange={setPrice} required />
 
-              <SelectField label="Hair Type" value={hairType} onChange={(v) => setHairType(v as HairType)}>
+              <SelectField
+                label="Hair Type"
+                value={hairType}
+                onChange={(v) => setHairType(v as DbHairType)}
+              >
                 {HAIR_TYPE_OPTIONS.map((t) => (
                   <option key={t} value={t}>
                     {t}
@@ -324,7 +315,7 @@ export default function AdminPage() {
               <SelectField
                 label="Hair Texture"
                 value={texture}
-                onChange={setTexture}
+                onChange={(v) => setTexture(v as DbTexture)}
               >
                 {TEXTURE_OPTIONS.map((t) => (
                   <option key={t} value={t}>
@@ -332,6 +323,27 @@ export default function AdminPage() {
                   </option>
                 ))}
               </SelectField>
+
+              <SelectField
+                label="Closure Type"
+                value={closureType}
+                onChange={setClosureType}
+                required={false}
+              >
+                <option value="">None</option>
+                {CLOSURE_OPTIONS.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </SelectField>
+
+              <TextField
+                label="Accessory Type"
+                value={accessoryType}
+                onChange={setAccessoryType}
+                required={false}
+              />
             </div>
 
             <div className="space-y-2">
@@ -349,54 +361,21 @@ export default function AdminPage() {
                         checked={checked}
                         onChange={(e) => {
                           const on = e.target.checked;
-                          setLengths((prev) =>
-                            on ? [...prev, n] : prev.filter((x) => x !== n),
-                          );
+                          setLengths((prev) => (on ? [...prev, n] : prev.filter((x) => x !== n)));
                         }}
                       />
-                      {n} in
+                      {n}&quot;
                     </label>
                   );
                 })}
               </div>
-              <p className="text-xs text-white/60">
-                If no lengths are selected, the product will be added without length
-                options.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/15 bg-black/40 px-4 py-3">
-              <p className="text-sm font-semibold text-white">Stock Availability</p>
-              <button
-                type="button"
-                onClick={() => setInStock((v) => !v)}
-                className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
-              >
-                {inStock ? "In Stock" : "Out of Stock"}
-              </button>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/15 bg-black/40 px-4 py-3">
-                <p className="text-sm font-semibold text-white">Best Seller</p>
-                <button
-                  type="button"
-                  onClick={() => setIsBestSeller((v) => !v)}
-                  className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
-                >
-                  {isBestSeller ? "Yes" : "No"}
-                </button>
-              </div>
-              <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/15 bg-black/40 px-4 py-3">
-                <p className="text-sm font-semibold text-white">Featured</p>
-                <button
-                  type="button"
-                  onClick={() => setIsFeatured((v) => !v)}
-                  className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
-                >
-                  {isFeatured ? "Yes" : "No"}
-                </button>
-              </div>
+              <Toggle label="Stock Availability" value={inStock} onToggle={() => setInStock((v) => !v)} onLabel="In Stock" offLabel="Out of Stock" />
+              <Toggle label="New Arrival" value={isNewArrival} onToggle={() => setIsNewArrival((v) => !v)} onLabel="Yes" offLabel="No" />
+              <Toggle label="Best Seller" value={isBestSeller} onToggle={() => setIsBestSeller((v) => !v)} onLabel="Yes" offLabel="No" />
+              <Toggle label="Featured" value={isFeatured} onToggle={() => setIsFeatured((v) => !v)} onLabel="Yes" offLabel="No" />
             </div>
 
             <div className="space-y-2">
@@ -408,18 +387,20 @@ export default function AdminPage() {
                 onChange={async (e) => {
                   const files = Array.from(e.target.files ?? []);
                   if (!files.length) return;
-                  const dataUrls = await Promise.all(
-                    files.map(
-                      (file) =>
-                        new Promise<string>((resolve, reject) => {
-                          const reader = new FileReader();
-                          reader.onload = () => resolve(String(reader.result));
-                          reader.onerror = () => reject(new Error("Failed to read file"));
-                          reader.readAsDataURL(file);
-                        }),
-                    ),
-                  );
-                  setImages((prev) => [...prev, ...dataUrls]);
+                  const id = editingId ?? crypto.randomUUID();
+                  if (!editingId) setEditingId(id);
+                  const urls: string[] = [];
+                  for (const file of files) {
+                    const safeName = file.name.replaceAll(" ", "-");
+                    const path = `${id}/${Date.now()}-${safeName}`;
+                    const url = await uploadPublicImage({
+                      bucket: "product-images",
+                      path,
+                      file,
+                    });
+                    urls.push(url);
+                  }
+                  setImages((prev) => [...prev, ...urls]);
                   e.target.value = "";
                 }}
                 className="block w-full text-sm text-white/80 file:mr-4 file:rounded-full file:border-0 file:bg-brand file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-[#C2177A]"
@@ -433,19 +414,11 @@ export default function AdminPage() {
                       className="relative overflow-hidden rounded-2xl border border-white/15 bg-black/40"
                     >
                       <div className="relative aspect-square w-full">
-                        <Image
-                          src={src}
-                          alt={`Product image ${idx + 1}`}
-                          fill
-                          className="object-cover"
-                          unoptimized
-                        />
+                        <Image src={src} alt={`Product image ${idx + 1}`} fill className="object-cover" unoptimized />
                       </div>
                       <button
                         type="button"
-                        onClick={() =>
-                          setImages((prev) => prev.filter((_, i) => i !== idx))
-                        }
+                        onClick={() => setImages((prev) => prev.filter((_, i) => i !== idx))}
                         className="w-full border-t border-white/15 bg-black/60 px-3 py-2 text-xs font-semibold text-white hover:text-brand"
                       >
                         Remove
@@ -456,62 +429,51 @@ export default function AdminPage() {
               ) : null}
             </div>
 
-            <TextAreaField
-              label="Product Description"
-              value={description}
-              onChange={setDescription}
-              required
-            />
+            <TextAreaField label="Product Description" value={description} onChange={setDescription} required />
 
             {formError ? <p className="text-sm text-white/80">{formError}</p> : null}
-            {saved ? <p className="text-sm text-white/80">Saved.</p> : null}
 
             <button
               type="submit"
-              className="inline-flex w-full items-center justify-center rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
+              disabled={saving}
+              className="inline-flex w-full items-center justify-center rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A] disabled:opacity-60"
             >
-              {editingId ? "Save changes" : "Add product"}
+              {saving ? "Saving…" : editingId ? "Save changes" : "Add product"}
             </button>
           </form>
         </div>
 
         <div className="space-y-4">
           <div className="rounded-3xl border border-border bg-card p-6 text-white">
-            <p className="text-sm font-semibold text-white">
-              Products ({sortedProducts.length})
-            </p>
-            <p className="mt-1 text-sm text-white/70">
-              Tap a product to edit or delete it.
-            </p>
+            <p className="text-sm font-semibold text-white">Products ({products.length})</p>
+            <p className="mt-1 text-sm text-white/70">Tap a product to edit or delete it.</p>
           </div>
 
           <div className="grid gap-4">
-            {sortedProducts.map((p) => (
-              <div
-                key={p.id}
-                className="rounded-3xl border border-border bg-card p-5 text-white"
-              >
+            {products.map((p) => (
+              <div key={p.id} className="rounded-3xl border border-border bg-card p-5 text-white">
                 <div className="flex items-start gap-4">
                   <div className="relative h-16 w-16 overflow-hidden rounded-2xl border border-white/15 bg-black/40">
-                    <Image
-                      src={p.image}
-                      alt={p.name}
-                      fill
-                      className="object-cover"
-                      unoptimized={p.image.startsWith("data:")}
-                    />
+                    {p.images?.[0] ? (
+                      <Image src={p.images[0]} alt={p.name} fill className="object-cover" unoptimized />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-brand text-white">
+                        B
+                      </div>
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold text-brand">{p.category}</p>
                     <p className="mt-1 truncate font-semibold text-white">{p.name}</p>
                     <p className="mt-1 text-sm text-white/70">
                       ₦{Number(p.price).toLocaleString("en-NG")}
-                      {p.inStock === false ? " • Out of stock" : ""}
+                      {p.in_stock === false ? " • Out of stock" : ""}
                     </p>
                     <p className="mt-1 text-xs text-white/70">
-                      {(p.hairType ?? "—") + (p.texture ? ` • ${p.texture}` : "")}
-                      {p.isBestSeller ? " • Best Seller" : ""}
-                      {p.isFeatured ? " • Featured" : ""}
+                      {(p.hair_type ?? "—") + (p.texture ? ` • ${p.texture}` : "")}
+                      {p.is_new_arrival ? " • New" : ""}
+                      {p.is_best_seller ? " • Best Seller" : ""}
+                      {p.is_featured ? " • Featured" : ""}
                     </p>
                   </div>
                 </div>
@@ -526,12 +488,16 @@ export default function AdminPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       const ok = window.confirm(`Delete "${p.name}"?`);
                       if (!ok) return;
-                      const nextProducts = catalog.products.filter((x) => x.id !== p.id);
-                      saveCatalogToStorage(nextProducts);
+                      const { error } = await supabase.from("products").delete().eq("id", p.id);
+                      if (error) {
+                        window.alert(error.message);
+                        return;
+                      }
                       if (editingId === p.id) resetForm();
+                      await loadAll();
                     }}
                     className="inline-flex items-center justify-center rounded-full border border-white/20 bg-black px-5 py-2 text-sm font-semibold text-white hover:border-brand/60"
                   >
@@ -545,19 +511,20 @@ export default function AdminPage() {
       </div>
 
       <div className="mt-10 rounded-3xl border border-border bg-card p-6 text-white">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold text-white">Social Feed Images</p>
             <p className="mt-1 text-sm text-white/70">
-              Upload up to 6 images for the homepage social strip.
+              Upload 6 images for the homepage social strip.
             </p>
           </div>
           <button
             type="button"
-            onClick={() => {
-              const ok = window.confirm("Clear all social images?");
+            onClick={async () => {
+              const ok = window.confirm("Clear all social feed images?");
               if (!ok) return;
-              socialFeed.clearAll();
+              await supabase.from("social_feed").delete().neq("slot_number", 0);
+              await loadAll();
             }}
             className="inline-flex items-center justify-center rounded-full border border-white/20 bg-black px-5 py-2 text-sm font-semibold text-white hover:border-brand/60"
           >
@@ -566,64 +533,63 @@ export default function AdminPage() {
         </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {socialFeed.images.map((src, idx) => (
-            <div
-              key={idx}
-              className="overflow-hidden rounded-3xl border border-white/15 bg-black/40"
-            >
-              <div className="relative aspect-[4/3] w-full">
-                {src ? (
-                  <Image
-                    src={src}
-                    alt={`Social image ${idx + 1}`}
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-brand">
-                    <p
-                      className="text-3xl leading-none text-white"
-                      style={{ fontFamily: "var(--font-logo)" }}
-                    >
-                      BelleHairs
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 p-4">
-                <label className="inline-flex cursor-pointer items-center justify-center rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#C2177A]">
-                  Upload
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      const dataUrl = await new Promise<string>((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(String(reader.result));
-                        reader.onerror = () => reject(new Error("Failed to read file"));
-                        reader.readAsDataURL(file);
-                      });
-                      socialFeed.setSlot(idx, dataUrl);
-                      e.target.value = "";
+          {Array.from({ length: 6 }).map((_, idx) => {
+            const slot = idx + 1;
+            const row = socialBySlot.get(slot);
+            const src = row?.image_url ?? null;
+            return (
+              <div key={slot} className="overflow-hidden rounded-3xl border border-white/15 bg-black/40">
+                <div className="relative aspect-[4/3] w-full">
+                  {src ? (
+                    <Image src={src} alt={`Social image ${slot}`} fill className="object-cover" unoptimized />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-brand">
+                      <p className="text-3xl leading-none text-white" style={{ fontFamily: "var(--font-logo)" }}>
+                        BelleHairs
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 p-4">
+                  <label className="inline-flex cursor-pointer items-center justify-center rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#C2177A]">
+                    Upload
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const path = `slot-${slot}/${Date.now()}-${file.name.replaceAll(" ", "-")}`;
+                        const url = await uploadPublicImage({
+                          bucket: "social-feed-images",
+                          path,
+                          file,
+                        });
+                        await supabase.from("social_feed").upsert(
+                          { slot_number: slot, image_url: url },
+                          { onConflict: "slot_number" },
+                        );
+                        await loadAll();
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={!src}
+                    onClick={async () => {
+                      await supabase.from("social_feed").delete().eq("slot_number", slot);
+                      await loadAll();
                     }}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={() => socialFeed.setSlot(idx, null)}
-                  className="inline-flex items-center justify-center rounded-full border border-white/20 bg-black px-4 py-2 text-sm font-semibold text-white hover:border-brand/60 disabled:opacity-60"
-                  disabled={!src}
-                >
-                  Remove
-                </button>
+                    className="inline-flex items-center justify-center rounded-full border border-white/20 bg-black px-4 py-2 text-sm font-semibold text-white hover:border-brand/60 disabled:opacity-60"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -674,7 +640,7 @@ function SelectField(props: {
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <label className="block space-y-2">
@@ -708,5 +674,26 @@ function TextAreaField(props: {
         className="w-full resize-none rounded-2xl border border-white/15 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40"
       />
     </label>
+  );
+}
+
+function Toggle(props: {
+  label: string;
+  value: boolean;
+  onToggle: () => void;
+  onLabel: string;
+  offLabel: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/15 bg-black/40 px-4 py-3">
+      <p className="text-sm font-semibold text-white">{props.label}</p>
+      <button
+        type="button"
+        onClick={props.onToggle}
+        className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
+      >
+        {props.value ? props.onLabel : props.offLabel}
+      </button>
+    </div>
   );
 }

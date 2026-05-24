@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import { useAdminAuth } from "@/lib/admin-auth";
 import {
   defaultDeliveryFeeConfig,
   loadDeliveryFeeConfigFromStorage,
@@ -23,7 +22,6 @@ function formatLines(values: string[]) {
 }
 
 export default function DeliveryAdminPage() {
-  const auth = useAdminAuth();
   const [config, setConfig] = useState<DeliveryFeeConfig>(() => {
     if (typeof window === "undefined") return defaultDeliveryFeeConfig;
     return loadDeliveryFeeConfigFromStorage();
@@ -47,27 +45,6 @@ export default function DeliveryAdminPage() {
     [config.zones.zone5.states],
   );
 
-  if (!auth.isAuthed) {
-    return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-12">
-        <div className="rounded-3xl border border-border bg-card p-10 text-center text-white">
-          <h1 className="text-2xl font-semibold tracking-tight text-white">
-            Admin login required
-          </h1>
-          <p className="mt-2 text-sm text-white/70">
-            Please login to access delivery settings.
-          </p>
-          <Link
-            href="/admin"
-            className="mt-6 inline-flex items-center justify-center rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
-          >
-            Go to Admin Login
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-12">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -82,6 +59,12 @@ export default function DeliveryAdminPage() {
           </p>
         </div>
         <div className="flex gap-3">
+          <Link
+            href="/admin"
+            className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
+          >
+            Back to admin
+          </Link>
           <Link
             href="/checkout"
             className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"

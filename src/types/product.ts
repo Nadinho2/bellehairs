@@ -1,5 +1,6 @@
 export type ProductCategory =
   | "Wigs"
+  | "Weavon"
   | "Bundles"
   | "Closures"
   | "Frontals"
@@ -18,9 +19,13 @@ export type Product = {
   category: ProductCategory;
   price: number;
   variants?: ProductVariant[];
+  lengths?: string[];
   hairType?: HairType;
   texture?: string;
+  closureType?: string;
+  accessoryType?: string;
   inStock?: boolean;
+  isNewArrival?: boolean;
   isBestSeller?: boolean;
   isFeatured?: boolean;
   createdAt?: number;

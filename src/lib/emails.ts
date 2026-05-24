@@ -13,6 +13,7 @@ export type EmailEntry = {
 
 export const EMAIL_LIST_STORAGE_KEY = "bellehairs.emailList.v1";
 export const EMAIL_LIST_UPDATED_EVENT = "bellehairs.emailList.updated";
+export const SUBSCRIBER_EMAIL_STORAGE_KEY = "bellehairs.subscriberEmail.v1";
 
 type Payload = {
   version: 1;
@@ -21,6 +22,36 @@ type Payload = {
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+export function readSubscriberEmail(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(SUBSCRIBER_EMAIL_STORAGE_KEY);
+    if (!raw) return null;
+    const normalized = normalizeEmail(raw);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) return null;
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
+export function writeSubscriberEmail(email: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (!email) {
+      localStorage.removeItem(SUBSCRIBER_EMAIL_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(SUBSCRIBER_EMAIL_STORAGE_KEY, normalizeEmail(email));
+  } catch {
+    return;
+  }
+}
+
+export function hasSubscriberEmail() {
+  return Boolean(readSubscriberEmail());
 }
 
 function readPayload(): Payload {
@@ -144,4 +175,3 @@ export function useEmailList() {
 
   return { entries: sorted, add, downloadCsv, refresh };
 }
-

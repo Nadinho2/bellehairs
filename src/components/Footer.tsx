@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { useState } from "react";
 
-import { addEmailToList } from "@/lib/emails";
-import { setCookie } from "@/lib/cookies";
+import { getCookie, setCookie } from "@/lib/cookies";
+import { readSubscriberEmail, writeSubscriberEmail } from "@/lib/emails";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function Footer() {
-  const [email, setEmail] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [email, setEmail] = useState(() => readSubscriberEmail() ?? "");
+  const [success, setSuccess] = useState(
+    () => Boolean(readSubscriberEmail()) || getCookie("bh_email_subscribed") === "1",
+  );
 
   return (
     <footer className="mt-auto border-t border-white/15 bg-black text-white">
@@ -166,11 +169,16 @@ export default function Footer() {
             ) : (
               <form
                 className="flex w-full flex-col gap-3 sm:flex-row"
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
-                  const res = addEmailToList(email, "footer");
-                  if (!res.ok) return;
+                  const normalized = email.trim().toLowerCase();
+                  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) return;
+                  const supabase = createSupabaseBrowserClient();
+                  await supabase
+                    .from("subscribers")
+                    .upsert({ email: normalized, source: "footer" }, { onConflict: "email" });
                   setCookie("bh_email_subscribed", "1", 365);
+                  writeSubscriberEmail(normalized);
                   setSuccess(true);
                   setEmail("");
                 }}

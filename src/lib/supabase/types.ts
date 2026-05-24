@@ -1,0 +1,96 @@
+export type DbProductCategory = "Wigs" | "Weavon" | "Accessories";
+export type DbHairType = "Human Hair" | "Vietnamese Hair" | "Blend Hair";
+export type DbTexture =
+  | "Straight"
+  | "Bone Straight"
+  | "Curly"
+  | "Pixie Curl"
+  | "Jerry Curl"
+  | "Burmese Curl";
+
+export type ProductRow = {
+  id: string;
+  name: string;
+  category: DbProductCategory;
+  hair_type: DbHairType | null;
+  texture: DbTexture | null;
+  closure_type: string | null;
+  accessory_type: string | null;
+  lengths: string[] | null;
+  price: number;
+  description: string | null;
+  images: string[] | null;
+  in_stock: boolean | null;
+  is_new_arrival: boolean | null;
+  is_best_seller: boolean | null;
+  is_featured: boolean | null;
+  created_at: string;
+};
+
+export type BannerSlideRow = {
+  id: string;
+  heading: string;
+  subtext: string | null;
+  image_url: string;
+  cta_label: string | null;
+  cta_link: string | null;
+  is_active: boolean | null;
+  slide_order: number | null;
+};
+
+export type SocialFeedRow = {
+  id: string;
+  image_url: string;
+  slot_number: number;
+};
+
+export type SubscriberRow = {
+  id: string;
+  email: string;
+  source: string;
+  created_at: string;
+};
+
+export type ReviewRow = {
+  id: string;
+  customer_name: string;
+  product_id: string;
+  rating: number;
+  review_text: string | null;
+  is_visible: boolean | null;
+  created_at: string;
+};
+
+export type OrderRow = {
+  id: string;
+  customer_name: string;
+  customer_email: string;
+  customer_phone: string;
+  customer_phone_2: string | null;
+  delivery_address: string | null;
+  state: string | null;
+  city: string | null;
+  delivery_method: string | null;
+  delivery_fee: number | null;
+  order_note: string | null;
+  items: unknown;
+  total_amount: number | null;
+  status: "pending" | "confirmed" | "delivered";
+  created_at: string;
+};
+
+export type OrderRowInsert = {
+  customer_name: string;
+  customer_email: string;
+  customer_phone: string;
+  customer_phone_2?: string | null;
+  delivery_address?: string | null;
+  state?: string | null;
+  city?: string | null;
+  delivery_method: string;
+  delivery_fee: number;
+  order_note?: string | null;
+  items: unknown;
+  total_amount: number;
+  status: "pending" | "confirmed" | "delivered";
+};

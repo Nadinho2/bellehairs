@@ -1,19 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { useCatalog } from "@/lib/catalog";
 import { formatPrice } from "@/lib/format";
+import { mapProductRowToProduct } from "@/lib/supabase/mappers";
+import { fetchProductsByIds } from "@/lib/supabase/browser-queries";
 import { selectCartCount, useCartStore } from "@/store/cartStore";
+import type { Product } from "@/types/product";
 
 export default function CartPage() {
-  const { byId } = useCatalog();
   const items = useCartStore((s) => s.items);
   const removeItem = useCartStore((s) => s.removeItem);
   const setQuantity = useCartStore((s) => s.setQuantity);
+  const [byId, setById] = useState<Record<string, Product>>({});
 
   const cartCount = useMemo(() => selectCartCount(items), [items]);
+
+  useEffect(() => {
+    const ids = Array.from(new Set(items.map((i) => i.productId)));
+    if (ids.length === 0) {
+      const t = window.setTimeout(() => setById({}), 0);
+      return () => window.clearTimeout(t);
+    }
+    fetchProductsByIds(ids)
+      .then((rows) => rows.map(mapProductRowToProduct))
+      .then((products) => {
+        const map: Record<string, Product> = {};
+        for (const p of products) map[p.id] = p;
+        setById(map);
+      })
+      .catch(() => setById({}));
+  }, [items]);
+
   const lineItems = useMemo(() => {
     return items
       .map((i) => ({ ...i, product: byId[i.productId] }))

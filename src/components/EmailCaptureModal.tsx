@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 
-import { addEmailToList, type EmailSource } from "@/lib/emails";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { readSubscriberEmail, writeSubscriberEmail, type EmailSource } from "@/lib/emails";
 
 export default function EmailCaptureModal(props: {
   open: boolean;
@@ -13,7 +14,7 @@ export default function EmailCaptureModal(props: {
   onClose: () => void;
   onSuccess?: () => void;
 }) {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => readSubscriberEmail() ?? "");
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -55,14 +56,26 @@ export default function EmailCaptureModal(props: {
         ) : (
           <form
             className="mt-6 space-y-3"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              const res = addEmailToList(email, props.source);
-              if (!res.ok) {
+              const normalized = email.trim().toLowerCase();
+              if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
                 setStatus("error");
-                setErrorMessage(res.message ?? "Something went wrong.");
+                setErrorMessage("Enter a valid email address.");
                 return;
               }
+              try {
+                const supabase = createSupabaseBrowserClient();
+                const { error } = await supabase
+                  .from("subscribers")
+                  .upsert({ email: normalized, source: props.source }, { onConflict: "email" });
+                if (error) throw error;
+              } catch {
+                setStatus("error");
+                setErrorMessage("Something went wrong. Please try again.");
+                return;
+              }
+              writeSubscriberEmail(normalized);
               setStatus("success");
               setErrorMessage(null);
               props.onSuccess?.();
@@ -110,4 +123,3 @@ export default function EmailCaptureModal(props: {
     </div>
   );
 }
-

@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { useCatalog } from "@/lib/catalog";
 import { setCookie } from "@/lib/cookies";
+import { readSubscriberEmail, writeSubscriberEmail } from "@/lib/emails";
 import {
   defaultDeliveryFeeConfig,
   getDeliveryQuote,
@@ -12,9 +12,13 @@ import {
   type DeliveryFeeConfig,
   type DeliveryMethod,
 } from "@/lib/delivery";
-import { addEmailToList } from "@/lib/emails";
 import { formatPrice } from "@/lib/format";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { fetchProductsByIds } from "@/lib/supabase/browser-queries";
+import { mapProductRowToProduct } from "@/lib/supabase/mappers";
 import { useCartStore } from "@/store/cartStore";
+import type { OrderRowInsert } from "@/lib/supabase/types";
+import type { Product } from "@/types/product";
 
 const NIGERIAN_STATES = [
   "Abia",
@@ -66,16 +70,16 @@ function normalizeNigerianPhone(input: string) {
 }
 
 export default function CheckoutPage() {
-  const { byId } = useCatalog();
   const items = useCartStore((s) => s.items);
   const clearCart = useCartStore((s) => s.clearCart);
+  const [byId, setById] = useState<Record<string, Product>>({});
 
   const [deliveryFeeConfig] = useState<DeliveryFeeConfig>(() => {
     if (typeof window === "undefined") return defaultDeliveryFeeConfig;
     return loadDeliveryFeeConfigFromStorage();
   });
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => readSubscriberEmail() ?? "");
   const [phonePrimary, setPhonePrimary] = useState("");
   const [phoneSecondary, setPhoneSecondary] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
@@ -85,6 +89,22 @@ export default function CheckoutPage() {
     "HOME_DELIVERY",
   );
   const [orderNote, setOrderNote] = useState("");
+
+  useEffect(() => {
+    const ids = Array.from(new Set(items.map((i) => i.productId)));
+    if (ids.length === 0) {
+      const t = window.setTimeout(() => setById({}), 0);
+      return () => window.clearTimeout(t);
+    }
+    fetchProductsByIds(ids)
+      .then((rows) => rows.map(mapProductRowToProduct))
+      .then((products) => {
+        const map: Record<string, Product> = {};
+        for (const p of products) map[p.id] = p;
+        setById(map);
+      })
+      .catch(() => setById({}));
+  }, [items]);
 
   const total = useMemo(() => {
     return items.reduce((acc, item) => {
@@ -217,15 +237,58 @@ export default function CheckoutPage() {
 
           <form
             className="mt-8 space-y-5"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
               if (!canComplete) return;
-              addEmailToList(email, "checkout");
+              const supabase = createSupabaseBrowserClient();
+              await supabase
+                .from("subscribers")
+                .upsert(
+                  { email: email.trim().toLowerCase(), source: "checkout" },
+                  { onConflict: "email" },
+                );
               setCookie("bh_email_subscribed", "1", 365);
+              writeSubscriberEmail(email.trim().toLowerCase());
+
+              const orderItems = items.map((item) => {
+                const product = byId[item.productId];
+                return {
+                  product_id: item.productId,
+                  name: product?.name ?? item.productId,
+                  quantity: item.quantity,
+                  length_in: item.variantLengthInches ?? null,
+                  unit_price:
+                    item.variantLengthInches && product?.variants?.length
+                      ? product.variants.find(
+                          (v) => v.lengthInches === item.variantLengthInches,
+                        )?.price ?? product.price
+                      : product?.price ?? 0,
+                };
+              });
+
+              const orderPayload: OrderRowInsert = {
+                customer_name: fullName.trim(),
+                customer_email: email.trim().toLowerCase(),
+                customer_phone: phonePrimary.trim(),
+                customer_phone_2: phoneSecondary.trim() || null,
+                delivery_address: isPickup ? null : deliveryAddress.trim(),
+                state: isPickup ? null : state || null,
+                city: isPickup ? null : cityOrLga.trim() || null,
+                delivery_method: deliveryMethod,
+                delivery_fee: deliveryFee,
+                order_note: orderNote.trim() || null,
+                items: orderItems,
+                total_amount: grandTotal,
+                status: "pending",
+              };
+
+              await supabase.from("orders").insert(orderPayload);
+
               window.open(storeWhatsAppHref, "_blank", "noopener,noreferrer");
               if (customerConfirmHref) {
                 window.open(customerConfirmHref, "_blank", "noopener,noreferrer");
               }
+              clearCart();
             }}
           >
             <div className="rounded-3xl border border-border bg-card p-6 text-white">
