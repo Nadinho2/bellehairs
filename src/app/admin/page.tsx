@@ -15,11 +15,13 @@ import {
   TEXTURE_OPTIONS,
   useCatalog,
 } from "@/lib/catalog";
+import { useSocialFeed } from "@/lib/socialFeed";
 import type { HairType, Product, ProductCategory } from "@/types/product";
 
 export default function AdminPage() {
   const auth = useAdminAuth();
   const catalog = useCatalog();
+  const socialFeed = useSocialFeed();
 
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -174,6 +176,12 @@ export default function AdminPage() {
             className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
           >
             View shop
+          </Link>
+          <Link
+            href="/admin/emails"
+            className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
+          >
+            Email list
           </Link>
           <Link
             href="/admin/delivery"
@@ -533,6 +541,89 @@ export default function AdminPage() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="mt-10 rounded-3xl border border-border bg-card p-6 text-white">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-white">Social Feed Images</p>
+            <p className="mt-1 text-sm text-white/70">
+              Upload up to 6 images for the homepage social strip.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const ok = window.confirm("Clear all social images?");
+              if (!ok) return;
+              socialFeed.clearAll();
+            }}
+            className="inline-flex items-center justify-center rounded-full border border-white/20 bg-black px-5 py-2 text-sm font-semibold text-white hover:border-brand/60"
+          >
+            Clear all
+          </button>
+        </div>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {socialFeed.images.map((src, idx) => (
+            <div
+              key={idx}
+              className="overflow-hidden rounded-3xl border border-white/15 bg-black/40"
+            >
+              <div className="relative aspect-[4/3] w-full">
+                {src ? (
+                  <Image
+                    src={src}
+                    alt={`Social image ${idx + 1}`}
+                    fill
+                    className="object-cover"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-brand">
+                    <p
+                      className="text-3xl leading-none text-white"
+                      style={{ fontFamily: "var(--font-logo)" }}
+                    >
+                      BelleHairs
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 p-4">
+                <label className="inline-flex cursor-pointer items-center justify-center rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#C2177A]">
+                  Upload
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const dataUrl = await new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(String(reader.result));
+                        reader.onerror = () => reject(new Error("Failed to read file"));
+                        reader.readAsDataURL(file);
+                      });
+                      socialFeed.setSlot(idx, dataUrl);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => socialFeed.setSlot(idx, null)}
+                  className="inline-flex items-center justify-center rounded-full border border-white/20 bg-black px-4 py-2 text-sm font-semibold text-white hover:border-brand/60 disabled:opacity-60"
+                  disabled={!src}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

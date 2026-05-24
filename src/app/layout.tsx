@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Dancing_Script, Playfair_Display, Poppins } from "next/font/google";
 import "./globals.css";
 
+import ExitIntentEmailCapture from "@/components/ExitIntentEmailCapture";
 import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 
@@ -42,6 +43,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <Navbar />
         <main className="flex w-full flex-1 flex-col">{children}</main>
+        <ExitIntentEmailCapture />
         <a
           href="https://wa.me/2349126914795?text=Hello%20BelleHairs%20Owerri%2C%20I%20want%20to%20place%20an%20order."
           target="_blank"

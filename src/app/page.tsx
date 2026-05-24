@@ -4,11 +4,17 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import EmailCaptureModal from "@/components/EmailCaptureModal";
 import { useCatalog } from "@/lib/catalog";
+import { getCookie, setCookie } from "@/lib/cookies";
 import { formatPrice } from "@/lib/format";
+import { useSocialFeed } from "@/lib/socialFeed";
 import { useWishlist } from "@/lib/wishlist";
 import { useCartStore } from "@/store/cartStore";
 import type { Product } from "@/types/product";
+
+const SUBSCRIBED_COOKIE = "bh_email_subscribed";
+const PROMO_LAST_SHOWN_COOKIE = "bh_promo_last_shown";
 
 function SectionTitle(props: { title: string }) {
   return (
@@ -129,6 +135,9 @@ function HomeProductCard(props: { product: Product }) {
 export default function Home() {
   const { products } = useCatalog();
   const [slide, setSlide] = useState(0);
+  const [promoOpen, setPromoOpen] = useState(false);
+
+  const social = useSocialFeed();
 
   const slides = useMemo(
     () => [
@@ -164,6 +173,26 @@ export default function Home() {
     return () => window.clearInterval(id);
   }, [slides.length]);
 
+  useEffect(() => {
+    const subscribed = getCookie(SUBSCRIBED_COOKIE) === "1";
+    if (subscribed) return;
+    const lastShownRaw = getCookie(PROMO_LAST_SHOWN_COOKIE);
+    const lastShown = lastShownRaw ? Number(lastShownRaw) : 0;
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    if (
+      Number.isFinite(lastShown) &&
+      lastShown > 0 &&
+      Date.now() - lastShown < sevenDaysMs
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setCookie(PROMO_LAST_SHOWN_COOKIE, String(Date.now()), 7);
+      setPromoOpen(true);
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const newArrivals = useMemo(() => {
     return [...products]
       .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
@@ -182,6 +211,7 @@ export default function Home() {
   const categoryRef = useReveal();
   const newRef = useReveal();
   const bestRef = useReveal();
+  const howToOrderRef = useReveal();
   const typeRef = useReveal();
   const featuredRef = useReveal();
   const whyRef = useReveal();
@@ -192,6 +222,17 @@ export default function Home() {
 
   return (
     <div className="w-full">
+      <EmailCaptureModal
+        open={promoOpen}
+        onClose={() => setPromoOpen(false)}
+        title="Get 10% Off Your First Order! 💕"
+        ctaLabel="Claim My Discount"
+        source="popup"
+        onSuccess={() => {
+          setCookie(SUBSCRIBED_COOKIE, "1", 365);
+          setPromoOpen(false);
+        }}
+      />
       <section ref={heroRef} className="reveal relative">
         <div className="relative h-[520px] w-full overflow-hidden bg-black md:h-[600px]">
           <Image
@@ -330,6 +371,51 @@ export default function Home() {
         </div>
       </section>
 
+      <section ref={howToOrderRef} className="reveal bg-black py-14">
+        <div className="mx-auto w-full max-w-6xl px-4">
+          <div className="text-center">
+            <h2 className="text-2xl font-semibold tracking-tight text-white md:text-3xl">
+              How to Order
+            </h2>
+            <div className="mx-auto mt-3 h-1 w-16 rounded-full bg-brand" />
+          </div>
+          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <HowToOrderStep
+              step={1}
+              icon="👀"
+              title="Browse Products"
+              description="Explore our wigs, weavon & accessories"
+            />
+            <HowToOrderStep
+              step={2}
+              icon="💬"
+              title="Order on WhatsApp"
+              description="Click the button and chat with us directly"
+            />
+            <HowToOrderStep
+              step={3}
+              icon="💳"
+              title="Confirm & Pay"
+              description="Pay securely via transfer or cash on pickup"
+            />
+            <HowToOrderStep
+              step={4}
+              icon="🚚"
+              title="We Deliver to You"
+              description="Fast delivery across Nigeria"
+            />
+          </div>
+          <div className="mt-10 flex justify-center">
+            <Link
+              href="/products"
+              className="inline-flex items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
+            >
+              Start Shopping Now
+            </Link>
+          </div>
+        </div>
+      </section>
+
       <section ref={typeRef} className="reveal py-14">
         <div className="mx-auto w-full max-w-6xl px-4">
           <SectionTitle title="Shop by Hair Type" />
@@ -403,20 +489,32 @@ export default function Home() {
         <div className="mx-auto w-full max-w-6xl px-4">
           <SectionTitle title="Follow Us @bellehairsng" />
           <div className="mt-10 flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {Array.from({ length: 6 }).map((_, idx) => (
+            {social.images.map((src, idx) => (
               <a
                 key={idx}
-                href="https://www.tiktok.com/@bellehairsng"
+                href="https://www.tiktok.com/@bellehairsng."
                 target="_blank"
                 rel="noreferrer"
                 className="relative h-28 w-44 shrink-0 overflow-hidden rounded-2xl border border-black/10 bg-black sm:h-36 sm:w-56"
               >
-                <Image
-                  src="https://images.unsplash.com/photo-1485290334039-a3c69043e517?auto=format&fit=crop&w=1000&q=80"
-                  alt="BelleHairs social"
-                  fill
-                  className="object-cover opacity-90"
-                />
+                {src ? (
+                  <Image
+                    src={src}
+                    alt="BelleHairs social"
+                    fill
+                    className="object-cover"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-brand">
+                    <p
+                      className="text-2xl leading-none text-white"
+                      style={{ fontFamily: "var(--font-logo)" }}
+                    >
+                      BelleHairs
+                    </p>
+                  </div>
+                )}
               </a>
             ))}
           </div>
@@ -496,6 +594,22 @@ function WhyCard(props: { icon: string; title: string; description: string }) {
     <div className="rounded-3xl border border-white/15 bg-black p-6">
       <p className="text-3xl">{props.icon}</p>
       <p className="mt-3 text-lg font-semibold text-brand">{props.title}</p>
+      <p className="mt-2 text-sm text-white/70">{props.description}</p>
+    </div>
+  );
+}
+
+function HowToOrderStep(props: {
+  step: number;
+  icon: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-3xl border border-white/15 bg-black p-6 text-white transition hover:border-brand">
+      <p className="text-3xl text-brand">{props.icon}</p>
+      <p className="mt-4 text-sm font-semibold text-brand">Step {props.step}</p>
+      <p className="mt-2 text-lg font-semibold text-white">{props.title}</p>
       <p className="mt-2 text-sm text-white/70">{props.description}</p>
     </div>
   );

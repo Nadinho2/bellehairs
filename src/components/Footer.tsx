@@ -1,6 +1,15 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
+
+import { addEmailToList } from "@/lib/emails";
+import { setCookie } from "@/lib/cookies";
 
 export default function Footer() {
+  const [email, setEmail] = useState("");
+  const [success, setSuccess] = useState(false);
+
   return (
     <footer className="mt-auto border-t border-white/15 bg-black text-white">
       <div className="mx-auto w-full max-w-6xl px-4 py-12">
@@ -60,16 +69,16 @@ export default function Footer() {
           <div>
             <p className="text-sm font-semibold text-white">Customer Care</p>
             <div className="mt-4 space-y-3 text-sm text-white/80">
-              <Link href="/checkout" className="block hover:text-brand">
+              <Link href="/how-to-order" className="block hover:text-brand">
                 How to Order
               </Link>
               <Link href="/checkout" className="block hover:text-brand">
                 Delivery Info
               </Link>
-              <Link href="/contact" className="block hover:text-brand">
+              <Link href="/return-policy" className="block hover:text-brand">
                 Return Policy
               </Link>
-              <Link href="/contact" className="block hover:text-brand">
+              <Link href="/faq" className="block hover:text-brand">
                 FAQs
               </Link>
             </div>
@@ -147,8 +156,47 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="mt-10 border-t border-white/15 pt-6 text-center text-xs text-white/60">
-          <p>© 2025 BelleHairs Owerri. All Rights Reserved.</p>
+        <div className="mt-10 border-t border-white/15 pt-6">
+          <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 text-center">
+            <p className="text-sm font-semibold text-white">
+              Join our VIP list for exclusive deals & new arrivals 💕
+            </p>
+            {success ? (
+              <p className="text-sm font-semibold text-brand">You&apos;re on the list! 🎉</p>
+            ) : (
+              <form
+                className="flex w-full flex-col gap-3 sm:flex-row"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const res = addEmailToList(email, "footer");
+                  if (!res.ok) return;
+                  setCookie("bh_email_subscribed", "1", 365);
+                  setSuccess(true);
+                  setEmail("");
+                }}
+              >
+                <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  type="email"
+                  required
+                  inputMode="email"
+                  placeholder="Enter your email"
+                  className="w-full rounded-full border border-white/15 bg-black/40 px-5 py-3 text-sm text-white placeholder:text-white/40 outline-none focus:border-brand"
+                />
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
+                >
+                  Subscribe
+                </button>
+              </form>
+            )}
+          </div>
+
+          <div className="mt-6 text-center text-xs text-white/60">
+            <p>© 2025 BelleHairs Owerri. All Rights Reserved.</p>
+          </div>
         </div>
       </div>
     </footer>

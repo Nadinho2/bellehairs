@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { useCatalog } from "@/lib/catalog";
+import { setCookie } from "@/lib/cookies";
 import {
   defaultDeliveryFeeConfig,
   getDeliveryQuote,
@@ -11,6 +12,7 @@ import {
   type DeliveryFeeConfig,
   type DeliveryMethod,
 } from "@/lib/delivery";
+import { addEmailToList } from "@/lib/emails";
 import { formatPrice } from "@/lib/format";
 import { useCartStore } from "@/store/cartStore";
 
@@ -73,6 +75,7 @@ export default function CheckoutPage() {
     return loadDeliveryFeeConfigFromStorage();
   });
   const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
   const [phonePrimary, setPhonePrimary] = useState("");
   const [phoneSecondary, setPhoneSecondary] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
@@ -158,6 +161,7 @@ export default function CheckoutPage() {
 
   const canComplete =
     fullName.trim().length > 1 &&
+    email.trim().length > 3 &&
     Boolean(phonePrimaryNormalized) &&
     (isPickup ||
       (deliveryAddress.trim().length > 5 &&
@@ -188,7 +192,7 @@ export default function CheckoutPage() {
       ? `Phone: ${primary} / ${secondary}\n`
       : `Phone: ${primary}\n`;
 
-    const message = `Hello BelleHairs Owerri,\n\nI want to place an order.\n\nCustomer details:\nName: ${fullName.trim()}\n${customerPhonesLine}${deliverySection}${deliveryFeeLine}${note}\nOrder summary:\n${orderLines}\n\nSubtotal: ${formatPrice(total)}\nDelivery fee: ${formatPrice(deliveryFee)}\nTotal: ${formatPrice(grandTotal)}`;
+    const message = `Hello BelleHairs Owerri,\n\nI want to place an order.\n\nCustomer details:\nName: ${fullName.trim()}\nEmail: ${email.trim()}\n${customerPhonesLine}${deliverySection}${deliveryFeeLine}${note}\nOrder summary:\n${orderLines}\n\nSubtotal: ${formatPrice(total)}\nDelivery fee: ${formatPrice(deliveryFee)}\nTotal: ${formatPrice(grandTotal)}`;
 
     return `https://wa.me/2349126914795?text=${encodeURIComponent(message)}`;
   })();
@@ -216,6 +220,8 @@ export default function CheckoutPage() {
             onSubmit={(e) => {
               e.preventDefault();
               if (!canComplete) return;
+              addEmailToList(email, "checkout");
+              setCookie("bh_email_subscribed", "1", 365);
               window.open(storeWhatsAppHref, "_blank", "noopener,noreferrer");
               if (customerConfirmHref) {
                 window.open(customerConfirmHref, "_blank", "noopener,noreferrer");
@@ -233,17 +239,27 @@ export default function CheckoutPage() {
                   required
                 />
                 <Field
+                  label="Email (for order confirmation)"
+                  value={email}
+                  onChange={setEmail}
+                  placeholder="e.g. you@example.com"
+                  required
+                  type="email"
+                />
+                <Field
                   label="Phone Number"
                   value={phonePrimary}
                   onChange={setPhonePrimary}
                   placeholder="e.g. 0912 691 4795"
                   required
+                  type="tel"
                 />
                 <Field
                   label="Second Phone Number (Optional)"
                   value={phoneSecondary}
                   onChange={setPhoneSecondary}
                   placeholder="e.g. 0803 000 0000"
+                  type="tel"
                 />
               </div>
             </div>
@@ -431,11 +447,13 @@ function Field(props: {
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  type?: "text" | "email" | "tel";
 }) {
   return (
     <label className="block space-y-2">
       <span className="text-sm font-semibold text-white">{props.label}</span>
       <input
+        type={props.type ?? "text"}
         value={props.value}
         onChange={(e) => props.onChange(e.target.value)}
         placeholder={props.placeholder}
