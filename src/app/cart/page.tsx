@@ -22,7 +22,15 @@ export default function CartPage() {
 
   const total = useMemo(() => {
     return lineItems.reduce(
-      (acc, i) => acc + i.quantity * (i.product?.price ?? 0),
+      (acc, i) => {
+        const product = i.product;
+        const unit =
+          i.variantLengthInches && product?.variants?.length
+            ? product.variants.find((v) => v.lengthInches === i.variantLengthInches)
+                ?.price ?? product.price
+            : product?.price ?? 0;
+        return acc + i.quantity * unit;
+      },
       0,
     );
   }, [lineItems]);
@@ -69,7 +77,7 @@ export default function CartPage() {
         <div className="space-y-4 lg:col-span-2">
           {lineItems.map((item) => (
             <div
-              key={item.productId}
+              key={item.id}
               className="flex flex-col gap-4 rounded-3xl border border-border bg-card p-5 text-white sm:flex-row sm:items-center"
             >
               <div className="flex-1">
@@ -79,8 +87,23 @@ export default function CartPage() {
                 <p className="mt-1 font-semibold tracking-tight text-white">
                   {item.product?.name}
                 </p>
+                {item.variantLengthInches ? (
+                  <p className="mt-1 text-sm text-white/70">
+                    Length: {item.variantLengthInches} in
+                  </p>
+                ) : null}
                 <p className="mt-1 text-sm text-white/70">
-                  {formatPrice(item.product?.price ?? 0)}
+                  {(() => {
+                    const product = item.product;
+                    if (!product) return formatPrice(0);
+                    if (item.variantLengthInches && product.variants?.length) {
+                      const v = product.variants.find(
+                        (x) => x.lengthInches === item.variantLengthInches,
+                      );
+                      return formatPrice(v?.price ?? product.price);
+                    }
+                    return formatPrice(product.price);
+                  })()}
                 </p>
               </div>
 
@@ -89,7 +112,7 @@ export default function CartPage() {
                   <button
                     type="button"
                     className="h-10 w-10 rounded-full text-white hover:text-brand"
-                    onClick={() => setQuantity(item.productId, item.quantity - 1)}
+                    onClick={() => setQuantity(item.id, item.quantity - 1)}
                     aria-label="Decrease quantity"
                   >
                     −
@@ -99,7 +122,7 @@ export default function CartPage() {
                     onChange={(e) => {
                       const next = Number(e.target.value);
                       if (Number.isNaN(next)) return;
-                      setQuantity(item.productId, next);
+                      setQuantity(item.id, next);
                     }}
                     inputMode="numeric"
                     className="w-14 bg-transparent text-center text-sm font-semibold text-white focus:outline-none"
@@ -108,7 +131,7 @@ export default function CartPage() {
                   <button
                     type="button"
                     className="h-10 w-10 rounded-full text-white hover:text-brand"
-                    onClick={() => setQuantity(item.productId, item.quantity + 1)}
+                    onClick={() => setQuantity(item.id, item.quantity + 1)}
                     aria-label="Increase quantity"
                   >
                     +
@@ -117,7 +140,7 @@ export default function CartPage() {
 
                 <button
                   type="button"
-                  onClick={() => removeItem(item.productId)}
+                  onClick={() => removeItem(item.id)}
                   className="rounded-full border border-white/20 bg-black px-4 py-2 text-sm font-semibold text-white hover:border-brand/60"
                 >
                   Remove

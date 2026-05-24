@@ -68,9 +68,15 @@ export function saveCatalogToStorage(products: Product[]) {
 }
 
 export function ensureCatalogInitialized() {
-  const existing = loadCatalogFromStorage();
-  if (existing?.length) return;
-  saveCatalogToStorage(baseProducts);
+  const raw = localStorage.getItem(PRODUCTS_STORAGE_KEY);
+  if (raw === null) {
+    saveCatalogToStorage(baseProducts);
+    return;
+  }
+  const parsed = safeParseProducts(raw);
+  if (parsed === null) {
+    saveCatalogToStorage(baseProducts);
+  }
 }
 
 export function makeIdFromName(name: string) {

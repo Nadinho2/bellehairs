@@ -8,11 +8,13 @@ import { useMemo } from "react";
 import AddToCartButton from "@/components/AddToCartButton";
 import { useCatalog } from "@/lib/catalog";
 import { formatPrice } from "@/lib/format";
+import { useCartStore } from "@/store/cartStore";
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
   const { byId } = useCatalog();
   const product = byId[params.id];
+  const addItem = useCartStore((s) => s.addItem);
 
   const images = useMemo(() => {
     if (!product) return [];
@@ -111,18 +113,14 @@ export default function ProductDetailPage() {
               <p className="text-sm font-semibold text-foreground">Select length</p>
               <div className="flex flex-wrap gap-2">
                 {variants.map((v) => (
-                  <a
+                  <button
+                    type="button"
                     key={v.lengthInches}
-                    href={buildWhatsAppHref({
-                      lengthInches: v.lengthInches,
-                      price: v.price,
-                    })}
-                    target="_blank"
-                    rel="noreferrer"
+                    onClick={() => addItem(product.id, v.lengthInches)}
                     className="inline-flex items-center justify-center rounded-full border border-black bg-white px-4 py-2 text-sm font-semibold text-black hover:border-brand"
                   >
                     {v.lengthInches} in
-                  </a>
+                  </button>
                 ))}
               </div>
               <a

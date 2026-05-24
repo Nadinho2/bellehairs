@@ -2,13 +2,16 @@
 
 import { useCartStore } from "@/store/cartStore";
 
-export default function AddToCartButton(props: { productId: string }) {
+export default function AddToCartButton(props: {
+  productId: string;
+  variantLengthInches?: number;
+}) {
   const addItem = useCartStore((s) => s.addItem);
 
   return (
     <button
       type="button"
-      onClick={() => addItem(props.productId)}
+      onClick={() => addItem(props.productId, props.variantLengthInches)}
       className="w-full rounded-full bg-brand px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
     >
       Add to cart

@@ -1,45 +1,57 @@
 import { create } from "zustand";
 
 export type CartItem = {
+  id: string;
   productId: string;
+  variantLengthInches?: number;
   quantity: number;
 };
 
 type CartState = {
   items: CartItem[];
-  addItem: (productId: string) => void;
-  removeItem: (productId: string) => void;
-  setQuantity: (productId: string, quantity: number) => void;
+  addItem: (productId: string, variantLengthInches?: number) => void;
+  removeItem: (itemId: string) => void;
+  setQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
 };
 
+function toItemId(productId: string, variantLengthInches?: number) {
+  return `${productId}:${variantLengthInches ?? "base"}`;
+}
+
 export const useCartStore = create<CartState>((set) => ({
   items: [],
-  addItem: (productId) =>
+  addItem: (productId, variantLengthInches) =>
     set((state) => {
-      const existing = state.items.find((i) => i.productId === productId);
+      const id = toItemId(productId, variantLengthInches);
+      const existing = state.items.find((i) => i.id === id);
       if (existing) {
         return {
           items: state.items.map((i) =>
-            i.productId === productId
+            i.id === id
               ? { ...i, quantity: i.quantity + 1 }
               : i,
           ),
         };
       }
-      return { items: [...state.items, { productId, quantity: 1 }] };
+      return {
+        items: [
+          ...state.items,
+          { id, productId, variantLengthInches, quantity: 1 },
+        ],
+      };
     }),
-  removeItem: (productId) =>
+  removeItem: (itemId) =>
     set((state) => ({
-      items: state.items.filter((i) => i.productId !== productId),
+      items: state.items.filter((i) => i.id !== itemId),
     })),
-  setQuantity: (productId, quantity) =>
+  setQuantity: (itemId, quantity) =>
     set((state) => ({
       items:
         quantity <= 0
-          ? state.items.filter((i) => i.productId !== productId)
+          ? state.items.filter((i) => i.id !== itemId)
           : state.items.map((i) =>
-              i.productId === productId ? { ...i, quantity } : i,
+              i.id === itemId ? { ...i, quantity } : i,
             ),
     })),
   clearCart: () => set({ items: [] }),
@@ -47,4 +59,3 @@ export const useCartStore = create<CartState>((set) => ({
 
 export const selectCartCount = (items: CartItem[]) =>
   items.reduce((acc, item) => acc + item.quantity, 0);
-

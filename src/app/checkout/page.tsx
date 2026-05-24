@@ -86,7 +86,12 @@ export default function CheckoutPage() {
   const total = useMemo(() => {
     return items.reduce((acc, item) => {
       const product = byId[item.productId];
-      return acc + item.quantity * (product?.price ?? 0);
+      const unit =
+        item.variantLengthInches && product?.variants?.length
+          ? product.variants.find((v) => v.lengthInches === item.variantLengthInches)
+              ?.price ?? product.price
+          : product?.price ?? 0;
+      return acc + item.quantity * unit;
     }, 0);
   }, [byId, items]);
 
@@ -133,8 +138,18 @@ export default function CheckoutPage() {
     .map((item) => {
       const product = byId[item.productId];
       const name = product?.name ?? item.productId;
-      const lineTotal = (product?.price ?? 0) * item.quantity;
-      return `- ${name} (Qty ${item.quantity}) — ${formatPrice(lineTotal)}`;
+      const unit =
+        item.variantLengthInches && product?.variants?.length
+          ? product.variants.find((v) => v.lengthInches === item.variantLengthInches)
+              ?.price ?? product.price
+          : product?.price ?? 0;
+      const lineTotal = unit * item.quantity;
+      const lengthLabel = item.variantLengthInches
+        ? ` • ${item.variantLengthInches} in`
+        : "";
+      return `- ${name}${lengthLabel} (Qty ${item.quantity}) — ${formatPrice(
+        lineTotal,
+      )}`;
     })
     .join("\n");
 
@@ -356,19 +371,28 @@ export default function CheckoutPage() {
             <div className="mt-4 space-y-3">
               {items.map((item) => {
                 const product = byId[item.productId];
+                const unit =
+                  item.variantLengthInches && product?.variants?.length
+                    ? product.variants.find(
+                        (v) => v.lengthInches === item.variantLengthInches,
+                      )?.price ?? product.price
+                    : product?.price ?? 0;
                 return (
                   <div
-                    key={item.productId}
+                    key={item.id}
                     className="flex items-start justify-between gap-4 text-sm"
                   >
                     <div>
                       <p className="font-semibold text-white">
                         {product?.name ?? item.productId}
                       </p>
-                      <p className="text-white/70">Qty {item.quantity}</p>
+                      <p className="text-white/70">
+                        Qty {item.quantity}
+                        {item.variantLengthInches ? ` • ${item.variantLengthInches} in` : ""}
+                      </p>
                     </div>
                     <p className="font-semibold text-white">
-                      {formatPrice((product?.price ?? 0) * item.quantity)}
+                      {formatPrice(unit * item.quantity)}
                     </p>
                   </div>
                 );
