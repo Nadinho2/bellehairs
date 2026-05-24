@@ -3,18 +3,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import AddToCartButton from "@/components/AddToCartButton";
 import { useCatalog } from "@/lib/catalog";
 import { formatPrice } from "@/lib/format";
-import { useCartStore } from "@/store/cartStore";
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
   const { byId } = useCatalog();
   const product = byId[params.id];
-  const addItem = useCartStore((s) => s.addItem);
 
   const images = useMemo(() => {
     if (!product) return [];
@@ -22,6 +20,14 @@ export default function ProductDetailPage() {
   }, [product]);
 
   const variants = product?.variants?.length ? product.variants : undefined;
+  const [selectedLengthInches, setSelectedLengthInches] = useState<number | null>(
+    null,
+  );
+
+  const selectedVariant = useMemo(() => {
+    if (!variants || selectedLengthInches === null) return null;
+    return variants.find((v) => v.lengthInches === selectedLengthInches) ?? null;
+  }, [selectedLengthInches, variants]);
 
   const whatsappBaseUrl = "https://wa.me/2349126914795";
   const buildWhatsAppHref = (opts?: { lengthInches?: number; price?: number }) => {
@@ -116,22 +122,61 @@ export default function ProductDetailPage() {
                   <button
                     type="button"
                     key={v.lengthInches}
-                    onClick={() => addItem(product.id, v.lengthInches)}
-                    className="inline-flex items-center justify-center rounded-full border border-black bg-white px-4 py-2 text-sm font-semibold text-black hover:border-brand"
+                    onClick={() => setSelectedLengthInches(v.lengthInches)}
+                    className={`inline-flex items-center justify-center rounded-full border bg-white px-4 py-2 text-sm font-semibold text-black transition ${
+                      selectedLengthInches === v.lengthInches
+                        ? "border-brand"
+                        : "border-black hover:border-brand"
+                    }`}
                   >
                     {v.lengthInches} in
                   </button>
                 ))}
               </div>
+
+              <div className="rounded-2xl border border-border bg-card p-5 text-white">
+                {selectedVariant ? (
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-white">
+                        Selected: {selectedVariant.lengthInches} in
+                      </p>
+                      <p className="mt-1 text-sm text-white/70">
+                        Price: {formatPrice(selectedVariant.price)}
+                      </p>
+                    </div>
+                    <p className="text-lg font-semibold text-brand">
+                      {formatPrice(selectedVariant.price)}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-white/70">
+                    Tap a length to preview the price, then add to cart.
+                  </p>
+                )}
+              </div>
+
               <a
-                href={buildWhatsAppHref()}
+                href={buildWhatsAppHref({
+                  lengthInches: selectedVariant?.lengthInches,
+                  price: selectedVariant?.price,
+                })}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex w-full items-center justify-center rounded-full bg-brand px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
               >
                 Order on WhatsApp
               </a>
-              <AddToCartButton productId={product.id} />
+              <AddToCartButton
+                productId={product.id}
+                variantLengthInches={selectedVariant?.lengthInches}
+                disabled={!selectedVariant}
+                label={
+                  selectedVariant
+                    ? `Add ${selectedVariant.lengthInches} in to cart`
+                    : "Add to cart"
+                }
+              />
               <p className="text-xs text-foreground/60">
                 Prefer chat? Tap “Order on WhatsApp” and we’ll confirm availability,
                 lengths, and delivery.
