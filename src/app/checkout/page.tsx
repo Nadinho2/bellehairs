@@ -13,7 +13,6 @@ import {
   type DeliveryMethod,
 } from "@/lib/delivery";
 import { formatPrice } from "@/lib/format";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { fetchProductsByIds } from "@/lib/supabase/browser-queries";
 import { mapProductRowToProduct } from "@/lib/supabase/mappers";
 import { useCartStore } from "@/store/cartStore";
@@ -240,13 +239,6 @@ export default function CheckoutPage() {
             onSubmit={async (e) => {
               e.preventDefault();
               if (!canComplete) return;
-              const supabase = createSupabaseBrowserClient();
-              await supabase
-                .from("subscribers")
-                .upsert(
-                  { email: email.trim().toLowerCase(), source: "checkout" },
-                  { onConflict: "email" },
-                );
               setCookie("bh_email_subscribed", "1", 365);
               writeSubscriberEmail(email.trim().toLowerCase());
 
@@ -282,7 +274,16 @@ export default function CheckoutPage() {
                 status: "pending",
               };
 
-              await supabase.from("orders").insert(orderPayload);
+              const res = await fetch("/api/orders", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify(orderPayload),
+              });
+              const json = (await res.json()) as { ok?: boolean; error?: string };
+              if (!res.ok || !json.ok) {
+                alert(json.error || "Failed to place order. Please try again.");
+                return;
+              }
 
               window.open(storeWhatsAppHref, "_blank", "noopener,noreferrer");
               if (customerConfirmHref) {

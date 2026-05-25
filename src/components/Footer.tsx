@@ -5,7 +5,6 @@ import { useState } from "react";
 
 import { getCookie, setCookie } from "@/lib/cookies";
 import { readSubscriberEmail, writeSubscriberEmail } from "@/lib/emails";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function Footer() {
   const [email, setEmail] = useState(() => readSubscriberEmail() ?? "");
@@ -173,10 +172,11 @@ export default function Footer() {
                   e.preventDefault();
                   const normalized = email.trim().toLowerCase();
                   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) return;
-                  const supabase = createSupabaseBrowserClient();
-                  await supabase
-                    .from("subscribers")
-                    .upsert({ email: normalized, source: "footer" }, { onConflict: "email" });
+                  await fetch("/api/subscribe", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ email: normalized, source: "footer" }),
+                  });
                   setCookie("bh_email_subscribed", "1", 365);
                   writeSubscriberEmail(normalized);
                   setSuccess(true);

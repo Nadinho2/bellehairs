@@ -197,7 +197,7 @@ export default function AdminPage() {
             href="/admin/emails"
             className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
           >
-            Email list
+            Emails
           </Link>
           <Link
             href="/admin/delivery"

@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { readSubscriberEmail, writeSubscriberEmail, type EmailSource } from "@/lib/emails";
 
 export default function EmailCaptureModal(props: {
@@ -65,11 +64,13 @@ export default function EmailCaptureModal(props: {
                 return;
               }
               try {
-                const supabase = createSupabaseBrowserClient();
-                const { error } = await supabase
-                  .from("subscribers")
-                  .upsert({ email: normalized, source: props.source }, { onConflict: "email" });
-                if (error) throw error;
+                const res = await fetch("/api/subscribe", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ email: normalized, source: props.source }),
+                });
+                const json = (await res.json()) as { ok?: boolean; error?: string };
+                if (!res.ok || !json.ok) throw new Error(json.error || "Failed to subscribe.");
               } catch {
                 setStatus("error");
                 setErrorMessage("Something went wrong. Please try again.");

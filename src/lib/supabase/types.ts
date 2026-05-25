@@ -51,6 +51,21 @@ export type SubscriberRow = {
   created_at: string;
 };
 
+export type EmailCampaignSegment = "all" | "customers" | "leads";
+export type EmailCampaignStatus = "scheduled" | "sending" | "sent" | "failed";
+
+export type EmailCampaignRow = {
+  id: string;
+  subject: string;
+  body_html: string;
+  segment: EmailCampaignSegment;
+  scheduled_at: string | null;
+  status: EmailCampaignStatus;
+  sent_at: string | null;
+  sent_count: number | null;
+  created_at: string;
+};
+
 export type ReviewRow = {
   id: string;
   customer_name: string;

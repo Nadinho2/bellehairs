@@ -1,0 +1,109 @@
+import { NextResponse } from "next/server";
+
+import { sendOrderConfirmationEmail } from "@/lib/email";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+type IncomingOrderItem = {
+  name: string;
+  quantity: number;
+  unit_price: number;
+};
+
+export async function POST(request: Request) {
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const body =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : ({} as Record<string, unknown>);
+
+  const customer_name = String(body.customer_name ?? "").trim();
+  const customer_email = normalizeEmail(String(body.customer_email ?? ""));
+  const delivery_method = String(body.delivery_method ?? "");
+  const delivery_fee = Number(body.delivery_fee ?? 0);
+  const total_amount = Number(body.total_amount ?? 0);
+  const itemsRaw = Array.isArray(body.items) ? body.items : [];
+  const items = itemsRaw as IncomingOrderItem[];
+
+  if (customer_name.length < 2) {
+    return NextResponse.json({ ok: false, error: "Customer name is required." }, { status: 400 });
+  }
+  if (!isValidEmail(customer_email)) {
+    return NextResponse.json({ ok: false, error: "Enter a valid email address." }, { status: 400 });
+  }
+  if (!delivery_method) {
+    return NextResponse.json({ ok: false, error: "Delivery method is required." }, { status: 400 });
+  }
+  if (!Number.isFinite(total_amount) || total_amount <= 0) {
+    return NextResponse.json({ ok: false, error: "Total amount is invalid." }, { status: 400 });
+  }
+  if (!items.length) {
+    return NextResponse.json({ ok: false, error: "Order items are required." }, { status: 400 });
+  }
+
+  const supabase = await createSupabaseServerClient();
+
+  const { error: subscriberError } = await supabase
+    .from("subscribers")
+    .upsert({ email: customer_email, source: "checkout" }, { onConflict: "email" });
+  if (subscriberError) {
+    return NextResponse.json({ ok: false, error: subscriberError.message }, { status: 500 });
+  }
+
+  const { data: orderData, error: orderError } = await supabase
+    .from("orders")
+    .insert({
+      customer_name,
+      customer_email,
+      customer_phone: String(body.customer_phone ?? ""),
+      customer_phone_2: body.customer_phone_2 ?? null,
+      delivery_address: body.delivery_address ?? null,
+      state: body.state ?? null,
+      city: body.city ?? null,
+      delivery_method,
+      delivery_fee,
+      order_note: body.order_note ?? null,
+      items: body.items ?? [],
+      total_amount,
+      status: body.status ?? "pending",
+    })
+    .select("id")
+    .single();
+
+  if (orderError) {
+    return NextResponse.json({ ok: false, error: orderError.message }, { status: 500 });
+  }
+
+  let emailSent = true;
+  try {
+    await sendOrderConfirmationEmail({
+      to: customer_email,
+      customerName: customer_name,
+      items: items.map((i) => ({
+        name: String(i?.name ?? ""),
+        quantity: Number(i?.quantity ?? 0),
+        unit_price: Number(i?.unit_price ?? 0),
+      })),
+      totalAmount: total_amount,
+      deliveryFee: delivery_fee,
+      deliveryMethod: delivery_method,
+      state: (body.state as string | null) ?? null,
+      cityOrLga: (body.city as string | null) ?? null,
+    });
+  } catch {
+    emailSent = false;
+  }
+
+  return NextResponse.json({ ok: true, orderId: orderData?.id ?? null, emailSent });
+}
