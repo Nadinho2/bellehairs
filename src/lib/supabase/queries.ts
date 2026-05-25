@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { BannerSlideRow, ProductRow, ReviewRow, SocialFeedRow } from "@/lib/supabase/types";
 
 export async function fetchActiveBannerSlides(): Promise<BannerSlideRow[]> {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("banner_slides")
     .select("*")
@@ -15,7 +15,7 @@ export async function fetchActiveBannerSlides(): Promise<BannerSlideRow[]> {
 }
 
 export async function fetchHomepageProducts() {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
 
   const [newest, best, featured] = await Promise.all([
     supabase.from("products").select("*").order("created_at", { ascending: false }).limit(8),
@@ -35,7 +35,7 @@ export async function fetchHomepageProducts() {
 }
 
 export async function fetchSocialFeed(): Promise<SocialFeedRow[]> {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("social_feed")
     .select("*")
@@ -45,7 +45,7 @@ export async function fetchSocialFeed(): Promise<SocialFeedRow[]> {
 }
 
 export async function fetchAllProducts(): Promise<ProductRow[]> {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("products")
     .select("*")
@@ -55,14 +55,14 @@ export async function fetchAllProducts(): Promise<ProductRow[]> {
 }
 
 export async function fetchProductById(id: string): Promise<ProductRow | null> {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.from("products").select("*").eq("id", id).maybeSingle();
   if (error) throw new Error(error.message);
   return (data ?? null) as ProductRow | null;
 }
 
 export async function fetchVisibleReviewsByProductId(productId: string): Promise<ReviewRow[]> {
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("reviews")
     .select("*")

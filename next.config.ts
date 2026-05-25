@@ -19,10 +19,7 @@ const nextConfig: NextConfig = {
       },
       ...(supabaseHostname
         ? [
-            {
-              protocol: "https",
-              hostname: supabaseHostname,
-            },
+            { protocol: "https" as const, hostname: supabaseHostname },
           ]
         : []),
     ],

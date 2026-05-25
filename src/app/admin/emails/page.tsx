@@ -37,12 +37,22 @@ export default function EmailListAdminPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase
-      .from("subscribers")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .then(({ data }) => setRows((data ?? []) as SubscriberRow[]))
-      .finally(() => setLoading(false));
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("subscribers")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (!alive) return;
+        setRows((data ?? []) as SubscriberRow[]);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, [supabase]);
 
   const counts = useMemo(() => {
