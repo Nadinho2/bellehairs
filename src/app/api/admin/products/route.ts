@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Upload at least one product image." }, { status: 400 });
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     id,
     name,
     category,
@@ -74,11 +74,27 @@ export async function POST(request: Request) {
     is_best_seller: body.is_best_seller ?? false,
     is_featured: body.is_featured ?? false,
   };
+  if ("length_prices" in body) {
+    payload.length_prices = body.length_prices && typeof body.length_prices === "object" ? body.length_prices : null;
+  }
 
   const service = createSupabaseServiceClient();
   const supabase = service ? service : await createSupabaseServerClient();
   const { error } = await supabase.from("products").upsert(payload, { onConflict: "id" });
-  if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  if (error) {
+    const msg = error.message || "";
+    if (msg.toLowerCase().includes("length_prices") && msg.toLowerCase().includes("does not exist")) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            'Missing "length_prices" column in products table. Add it in Supabase: alter table public.products add column length_prices jsonb;',
+        },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ ok: true });
 }
 

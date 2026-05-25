@@ -51,6 +51,7 @@ export default function AdminPage() {
   const [category, setCategory] = useState<DbProductCategory>("Wigs");
   const [price, setPrice] = useState<string>("");
   const [lengths, setLengths] = useState<number[]>([]);
+  const [lengthPrices, setLengthPrices] = useState<Record<number, string>>({});
   const [hairType, setHairType] = useState<DbHairType>("Human Hair");
   const [texture, setTexture] = useState<DbTexture>("Straight");
   const [closureType, setClosureType] = useState<string>("");
@@ -60,6 +61,7 @@ export default function AdminPage() {
   const [isBestSeller, setIsBestSeller] = useState(false);
   const [isFeatured, setIsFeatured] = useState(false);
   const [images, setImages] = useState<string[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
   const [description, setDescription] = useState("");
 
   const [saving, setSaving] = useState(false);
@@ -110,6 +112,7 @@ export default function AdminPage() {
     setCategory("Wigs");
     setPrice("");
     setLengths([]);
+    setLengthPrices({});
     setHairType("Human Hair");
     setTexture("Straight");
     setClosureType("");
@@ -119,6 +122,7 @@ export default function AdminPage() {
     setIsBestSeller(false);
     setIsFeatured(false);
     setImages([]);
+    setUploadingImages(false);
     setDescription("");
     setFormError(null);
   };
@@ -133,6 +137,18 @@ export default function AdminPage() {
         .map((v) => Number(String(v).replace(/[^\d]/g, "")))
         .filter((n) => Number.isFinite(n) && n > 0),
     );
+    const byLength: Record<number, string> = {};
+    const lengthPricesRaw = (p as any)?.length_prices as Record<string, unknown> | null | undefined;
+    if (lengthPricesRaw && typeof lengthPricesRaw === "object") {
+      for (const [k, v] of Object.entries(lengthPricesRaw)) {
+        const n = Number(String(k).replace(/[^\d]/g, ""));
+        const priceNum = Number(v);
+        if (Number.isFinite(n) && n > 0 && Number.isFinite(priceNum) && priceNum > 0) {
+          byLength[n] = String(priceNum);
+        }
+      }
+    }
+    setLengthPrices(byLength);
     setHairType((p.hair_type ?? "Human Hair") as DbHairType);
     setTexture((p.texture ?? "Straight") as DbTexture);
     setClosureType(p.closure_type ?? "");
@@ -142,6 +158,7 @@ export default function AdminPage() {
     setIsBestSeller(p.is_best_seller === true);
     setIsFeatured(p.is_featured === true);
     setImages(p.images ?? []);
+    setUploadingImages(false);
     setDescription(p.description ?? "");
     setFormError(null);
   };
@@ -251,10 +268,25 @@ export default function AdminPage() {
                 if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
                   throw new Error("Enter a valid price.");
                 }
+                if (uploadingImages) {
+                  throw new Error("Please wait for images to finish uploading.");
+                }
                 if (images.length === 0) throw new Error("Upload at least one product image.");
 
                 const id = editingId ?? crypto.randomUUID();
-                const payload = {
+                const lengthPriceMap: Record<string, number> = {};
+                for (const n of lengths) {
+                  const raw = lengthPrices[n];
+                  const num = Number(raw);
+                  if (Number.isFinite(num) && num > 0) {
+                    lengthPriceMap[`${n}"`] = num;
+                  }
+                }
+                const derivedPrice =
+                  Object.keys(lengthPriceMap).length > 0
+                    ? Math.min(parsedPrice, ...Object.values(lengthPriceMap))
+                    : parsedPrice;
+                const payload: Record<string, unknown> = {
                   id,
                   name: trimmedName,
                   category,
@@ -263,7 +295,7 @@ export default function AdminPage() {
                   closure_type: category === "Weavon" ? (closureType || null) : null,
                   accessory_type: category === "Accessories" ? (accessoryType || null) : null,
                   lengths: lengths.map((n) => `${n}"`),
-                  price: parsedPrice,
+                  price: derivedPrice,
                   description: description.trim(),
                   images,
                   in_stock: inStock,
@@ -271,6 +303,9 @@ export default function AdminPage() {
                   is_best_seller: isBestSeller,
                   is_featured: isFeatured,
                 };
+                if (Object.keys(lengthPriceMap).length) {
+                  payload.length_prices = lengthPriceMap;
+                }
 
                 const res = await fetch("/api/admin/products", {
                   method: "POST",
@@ -288,6 +323,7 @@ export default function AdminPage() {
               }
             }}
           >
+            {formError ? <p className="text-sm font-semibold text-brand">{formError}</p> : null}
             <div className="grid gap-4 sm:grid-cols-2">
               <TextField label="Product Name" value={name} onChange={setName} required />
 
@@ -368,6 +404,15 @@ export default function AdminPage() {
                         onChange={(e) => {
                           const on = e.target.checked;
                           setLengths((prev) => (on ? [...prev, n] : prev.filter((x) => x !== n)));
+                          setLengthPrices((prev) => {
+                            const next = { ...prev };
+                            if (on) {
+                              if (typeof next[n] === "undefined") next[n] = price || "";
+                            } else {
+                              delete next[n];
+                            }
+                            return next;
+                          });
                         }}
                       />
                       {n}&quot;
@@ -376,6 +421,32 @@ export default function AdminPage() {
                 })}
               </div>
             </div>
+
+            {lengths.length ? (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold text-white">Price per length (optional)</p>
+                <p className="text-xs text-white/60">
+                  Set different prices for each selected inch. If you leave a price empty, the main price will be used.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[...lengths].sort((a, b) => a - b).map((n) => (
+                    <label key={n} className="block space-y-2">
+                      <span className="text-sm font-semibold text-white">{n}&quot; price (₦)</span>
+                      <input
+                        inputMode="numeric"
+                        value={lengthPrices[n] ?? ""}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/[^\d]/g, "");
+                          setLengthPrices((prev) => ({ ...prev, [n]: raw }));
+                        }}
+                        placeholder={price ? `Default: ${price}` : "e.g. 45000"}
+                        className="h-11 w-full rounded-2xl border border-white/15 bg-black/40 px-4 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <Toggle label="Stock Availability" value={inStock} onToggle={() => setInStock((v) => !v)} onLabel="In Stock" offLabel="Out of Stock" />
@@ -396,6 +467,7 @@ export default function AdminPage() {
                   if (!files.length) return;
                   const id = editingId ?? crypto.randomUUID();
                   if (!editingId) setEditingId(id);
+                  setUploadingImages(true);
                   try {
                     const urls: string[] = [];
                     for (const file of files) {
@@ -412,10 +484,13 @@ export default function AdminPage() {
                     e.target.value = "";
                   } catch (err) {
                     setFormError((err as Error).message || "Failed to upload image.");
+                  } finally {
+                    setUploadingImages(false);
                   }
                 }}
                 className="block w-full text-sm text-white/80 file:mr-4 file:rounded-full file:border-0 file:bg-brand file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-[#C2177A]"
               />
+              {uploadingImages ? <p className="text-xs font-semibold text-white/70">Uploading images…</p> : null}
 
               {images.length ? (
                 <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
@@ -442,14 +517,12 @@ export default function AdminPage() {
 
             <TextAreaField label="Product Description" value={description} onChange={setDescription} required />
 
-            {formError ? <p className="text-sm text-white/80">{formError}</p> : null}
-
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || uploadingImages}
               className="inline-flex w-full items-center justify-center rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A] disabled:opacity-60"
             >
-              {saving ? "Saving…" : editingId ? "Save changes" : "Add product"}
+              {saving ? "Saving…" : uploadingImages ? "Uploading images…" : editingId ? "Save changes" : "Add product"}
             </button>
           </form>
         </div>

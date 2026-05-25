@@ -10,16 +10,24 @@ function parseLengthToNumber(v: string) {
 export function mapProductRowToProduct(row: ProductRow): Product {
   const images = row.images?.filter(Boolean) ?? [];
   const lengths = row.lengths?.filter(Boolean) ?? [];
+  const lengthPrices = row.length_prices ?? null;
   const lengthNumbers = lengths
     .map((l) => parseLengthToNumber(l))
     .filter((n): n is number => typeof n === "number");
 
   const variants =
     lengthNumbers.length > 0
-      ? lengthNumbers.map((lengthInches) => ({
-          lengthInches,
-          price: Number(row.price),
-        }))
+      ? lengthNumbers.map((lengthInches) => {
+          const key = `${lengthInches}"`;
+          const priceFromMap =
+            lengthPrices && typeof (lengthPrices as any)[key] !== "undefined"
+              ? Number((lengthPrices as any)[key])
+              : null;
+          return {
+            lengthInches,
+            price: Number.isFinite(priceFromMap) && (priceFromMap as number) > 0 ? (priceFromMap as number) : Number(row.price),
+          };
+        })
       : undefined;
 
   return {
@@ -43,4 +51,3 @@ export function mapProductRowToProduct(row: ProductRow): Product {
     images,
   };
 }
-

@@ -18,6 +18,7 @@ export type ProductRow = {
   accessory_type: string | null;
   lengths: string[] | null;
   price: number;
+  length_prices?: Record<string, number> | null;
   description: string | null;
   images: string[] | null;
   in_stock: boolean | null;
