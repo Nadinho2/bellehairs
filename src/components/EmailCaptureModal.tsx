@@ -71,9 +71,9 @@ export default function EmailCaptureModal(props: {
                 });
                 const json = (await res.json()) as { ok?: boolean; error?: string };
                 if (!res.ok || !json.ok) throw new Error(json.error || "Failed to subscribe.");
-              } catch {
+              } catch (err) {
                 setStatus("error");
-                setErrorMessage("Something went wrong. Please try again.");
+                setErrorMessage((err as Error).message || "Something went wrong. Please try again.");
                 return;
               }
               writeSubscriberEmail(normalized);

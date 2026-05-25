@@ -24,6 +24,14 @@ function sanitizeHtml(input: string) {
   return html;
 }
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 async function runWithConcurrency<T>(
   items: T[],
   concurrency: number,
@@ -91,6 +99,10 @@ export async function POST(request: Request) {
   const bodyHtml = sanitizeHtml(String(body.bodyHtml ?? ""));
   const segment = toSegment(String(body.segment ?? "all"));
   const scheduledAtRaw = body.scheduledAt ? String(body.scheduledAt) : null;
+  const manualEmailsRaw = Array.isArray(body.manualEmails) ? (body.manualEmails as unknown[]) : null;
+  const manualEmails = manualEmailsRaw
+    ? manualEmailsRaw.map((e) => normalizeEmail(String(e))).filter((e) => isValidEmail(e))
+    : [];
 
   if (subject.length < 3) {
     return NextResponse.json({ ok: false, error: "Subject is required." }, { status: 400 });
@@ -104,6 +116,13 @@ export async function POST(request: Request) {
 
   const now = new Date();
   const shouldSchedule = scheduledAt && scheduledAt.getTime() > now.getTime() + 15 * 1000;
+
+  if (shouldSchedule && manualEmails.length) {
+    return NextResponse.json(
+      { ok: false, error: "Manual recipient list cannot be scheduled. Use Send Now." },
+      { status: 400 },
+    );
+  }
 
   const campaignId = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : null;
   const id = campaignId ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -129,18 +148,29 @@ export async function POST(request: Request) {
   }
 
   try {
-    const subscribers = await fetchSubscribers(auth.supabase, segment);
-    await runWithConcurrency(subscribers, 5, async (s) => {
+    const recipients = manualEmails.length
+      ? manualEmails.map((email) => ({ email } as SubscriberRow))
+      : await fetchSubscribers(auth.supabase, segment);
+    await runWithConcurrency(recipients, 5, async (s) => {
       await sendCampaignEmail({ to: s.email, subject, bodyHtml });
     });
 
     const { error: updateError } = await auth.supabase
       .from("email_campaigns")
-      .update({ status: "sent", sent_at: new Date().toISOString(), sent_count: subscribers.length })
+      .update({
+        status: "sent",
+        sent_at: new Date().toISOString(),
+        sent_count: recipients.length,
+      })
       .eq("id", id);
     if (updateError) throw new Error(updateError.message);
 
-    return NextResponse.json({ ok: true, scheduled: false, campaignId: id, sentCount: subscribers.length });
+    return NextResponse.json({
+      ok: true,
+      scheduled: false,
+      campaignId: id,
+      sentCount: recipients.length,
+    });
   } catch (err) {
     await auth.supabase
       .from("email_campaigns")

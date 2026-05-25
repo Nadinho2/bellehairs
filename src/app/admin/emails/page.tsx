@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { EmailCampaignRow, EmailCampaignSegment, SubscriberRow } from "@/lib/supabase/types";
 
 function formatDate(iso: string) {
@@ -153,9 +152,9 @@ function ToolbarButton(props: { label: string; onClick: () => void }) {
 }
 
 export default function EmailListAdminPage() {
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [rows, setRows] = useState<SubscriberRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<"subscribers" | "campaign">("subscribers");
 
   const [search, setSearch] = useState("");
@@ -167,6 +166,8 @@ export default function EmailListAdminPage() {
   const [subject, setSubject] = useState("");
   const [bodyHtml, setBodyHtml] = useState("");
   const [segment, setSegment] = useState<EmailCampaignSegment>("all");
+  const [sendMode, setSendMode] = useState<"segment" | "manual">("segment");
+  const [manualEmailsText, setManualEmailsText] = useState("");
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduleAt, setScheduleAt] = useState("");
   const [sending, setSending] = useState(false);
@@ -174,16 +175,25 @@ export default function EmailListAdminPage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const [productName, setProductName] = useState("");
+  const [productPrice, setProductPrice] = useState("");
+  const [productImageUrl, setProductImageUrl] = useState("");
+  const [productLink, setProductLink] = useState("https://bellehairs.vercel.app/products");
+
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const { data } = await supabase
-          .from("subscribers")
-          .select("*")
-          .order("created_at", { ascending: false });
+        setLoadError(null);
+        const res = await fetch("/api/admin/subscribers", { method: "GET" });
+        const json = (await res.json()) as { ok?: boolean; rows?: SubscriberRow[]; error?: string };
+        if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load subscribers.");
         if (!alive) return;
-        setRows((data ?? []) as SubscriberRow[]);
+        setRows((json.rows ?? []) as SubscriberRow[]);
+      } catch (err) {
+        if (!alive) return;
+        setRows([]);
+        setLoadError((err as Error).message || "Failed to load subscribers.");
       } finally {
         if (alive) setLoading(false);
       }
@@ -191,7 +201,7 @@ export default function EmailListAdminPage() {
     return () => {
       alive = false;
     };
-  }, [supabase]);
+  }, []);
 
   const refreshCampaigns = useCallback(async () => {
     setCampaignLoading(true);
@@ -271,6 +281,7 @@ export default function EmailListAdminPage() {
           <p className="text-sm text-foreground/70">
             Emails collected from popups, footer, checkout, and exit intent.
           </p>
+          {loadError ? <p className="text-sm font-semibold text-brand">{loadError}</p> : null}
         </div>
         <div className="flex flex-wrap gap-3">
           <Link
@@ -394,9 +405,14 @@ export default function EmailListAdminPage() {
                         type="button"
                         onClick={async () => {
                           if (!confirm(`Unsubscribe ${r.email}?`)) return;
-                          const { error } = await supabase.from("subscribers").delete().eq("id", r.id);
-                          if (error) {
-                            alert(error.message);
+                          const res = await fetch("/api/admin/subscribers", {
+                            method: "DELETE",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({ id: r.id }),
+                          });
+                          const json = (await res.json()) as { ok?: boolean; error?: string };
+                          if (!res.ok || !json.ok) {
+                            alert(json.error || "Failed to delete subscriber.");
                             return;
                           }
                           setRows((prev) => prev.filter((x) => x.id !== r.id));
@@ -432,10 +448,23 @@ export default function EmailListAdminPage() {
                       scheduleEnabled && scheduleAt
                         ? new Date(scheduleAt).toISOString()
                         : null;
+                    const manualEmails =
+                      sendMode === "manual"
+                        ? manualEmailsText
+                            .split(/[\n,]+/g)
+                            .map((s) => s.trim().toLowerCase())
+                            .filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s))
+                        : [];
                     const res = await fetch("/api/admin/campaigns", {
                       method: "POST",
                       headers: { "content-type": "application/json" },
-                      body: JSON.stringify({ subject, bodyHtml, segment, scheduledAt }),
+                      body: JSON.stringify({
+                        subject,
+                        bodyHtml,
+                        segment,
+                        scheduledAt,
+                        manualEmails: manualEmails.length ? manualEmails : undefined,
+                      }),
                     });
                     const json = (await res.json()) as {
                       ok?: boolean;
@@ -447,7 +476,11 @@ export default function EmailListAdminPage() {
                     if (json.scheduled) {
                       setSendMessage("✅ Campaign scheduled.");
                     } else {
-                      setSendMessage(`✅ Email sent to ${json.sentCount ?? 0} subscribers`);
+                      setSendMessage(
+                        `✅ Email sent to ${json.sentCount ?? 0} ${
+                          sendMode === "manual" ? "recipients" : "subscribers"
+                        }`,
+                      );
                     }
                     await refreshCampaigns();
                   } catch (err) {
@@ -501,6 +534,25 @@ export default function EmailListAdminPage() {
                         );
                       }}
                     />
+                    <ToolbarButton
+                      label="Product"
+                      onClick={() => {
+                        const name = (productName || "[Product Name]").trim();
+                        const price = (productPrice || "[Price]").trim();
+                        const image = (productImageUrl || "https://placehold.co/560x360/png").trim();
+                        const link = (productLink || "https://bellehairs.vercel.app/products").trim();
+                        insertAtSelection(
+                          `<div style="border:1px solid #eee;border-radius:14px;padding:14px;margin-top:12px;">
+  <img src="${image}" alt="${name}" style="width:100%;height:auto;border-radius:12px;display:block;" />
+  <div style="margin-top:12px;font-weight:900;font-size:16px;">${name}</div>
+  <div style="margin-top:4px;color:#666;font-size:13px;">₦${price}</div>
+  <div style="margin-top:12px;">
+    <a href="${link}" style="display:inline-block;background:#E91E8C;color:#fff;text-decoration:none;padding:12px 18px;border-radius:999px;font-size:14px;font-weight:800;">Shop Now</a>
+  </div>
+</div>`,
+                        );
+                      }}
+                    />
                   </div>
                   <textarea
                     ref={editorRef}
@@ -519,14 +571,64 @@ export default function EmailListAdminPage() {
                       Preview
                     </button>
                     <select
-                      value={segment}
-                      onChange={(e) => setSegment(e.target.value as EmailCampaignSegment)}
+                      value={sendMode}
+                      onChange={(e) => {
+                        const next = e.target.value as "segment" | "manual";
+                        setSendMode(next);
+                        if (next === "manual") setScheduleEnabled(false);
+                      }}
                       className="h-10 rounded-full border border-white/15 bg-black/40 px-4 text-sm font-semibold text-white outline-none focus:ring-2 focus:ring-brand/40"
                     >
-                      <option value="all">All subscribers</option>
-                      <option value="customers">Only checkout (customers)</option>
-                      <option value="leads">Only popup/footer (leads)</option>
+                      <option value="segment">Send to segment</option>
+                      <option value="manual">Manual emails</option>
                     </select>
+                    {sendMode === "segment" ? (
+                      <select
+                        value={segment}
+                        onChange={(e) => setSegment(e.target.value as EmailCampaignSegment)}
+                        className="h-10 rounded-full border border-white/15 bg-black/40 px-4 text-sm font-semibold text-white outline-none focus:ring-2 focus:ring-brand/40"
+                      >
+                        <option value="all">All subscribers</option>
+                        <option value="customers">Only checkout (customers)</option>
+                        <option value="leads">Only popup/footer (leads)</option>
+                      </select>
+                    ) : null}
+                  </div>
+
+                  {sendMode === "manual" ? (
+                    <textarea
+                      value={manualEmailsText}
+                      onChange={(e) => setManualEmailsText(e.target.value)}
+                      className="min-h-24 w-full rounded-2xl border border-white/15 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40"
+                      placeholder="Enter emails (one per line or comma-separated)"
+                    />
+                  ) : null}
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <input
+                      value={productName}
+                      onChange={(e) => setProductName(e.target.value)}
+                      placeholder="Product name (optional)"
+                      className="h-10 w-full rounded-2xl border border-white/15 bg-black/40 px-4 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40"
+                    />
+                    <input
+                      value={productPrice}
+                      onChange={(e) => setProductPrice(e.target.value)}
+                      placeholder="Product price (optional)"
+                      className="h-10 w-full rounded-2xl border border-white/15 bg-black/40 px-4 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40"
+                    />
+                    <input
+                      value={productImageUrl}
+                      onChange={(e) => setProductImageUrl(e.target.value)}
+                      placeholder="Product image URL (optional)"
+                      className="h-10 w-full rounded-2xl border border-white/15 bg-black/40 px-4 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40 sm:col-span-2"
+                    />
+                    <input
+                      value={productLink}
+                      onChange={(e) => setProductLink(e.target.value)}
+                      placeholder="Product link (optional)"
+                      className="h-10 w-full rounded-2xl border border-white/15 bg-black/40 px-4 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40 sm:col-span-2"
+                    />
                   </div>
                 </div>
 
@@ -534,7 +636,10 @@ export default function EmailListAdminPage() {
                   <input
                     type="checkbox"
                     checked={scheduleEnabled}
-                    onChange={(e) => setScheduleEnabled(e.target.checked)}
+                    onChange={(e) => {
+                      if (sendMode === "manual") return;
+                      setScheduleEnabled(e.target.checked);
+                    }}
                     className="h-4 w-4 accent-brand"
                   />
                   Schedule
@@ -619,11 +724,11 @@ export default function EmailListAdminPage() {
 
           {previewOpen ? (
             <div
-              className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4"
+              className="fixed inset-0 z-[80] flex items-start justify-center overflow-y-auto bg-black/70 px-4 py-6"
               role="dialog"
               aria-modal="true"
             >
-              <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-white/10 bg-black text-white shadow-xl">
+              <div className="w-full max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-black text-white shadow-xl">
                 <div className="flex items-center justify-between gap-4 border-b border-white/10 p-4">
                   <p className="text-sm font-semibold text-white">Preview</p>
                   <button
@@ -635,7 +740,7 @@ export default function EmailListAdminPage() {
                     ×
                   </button>
                 </div>
-                <div className="bg-white p-5">
+                <div className="max-h-[80vh] overflow-y-auto bg-white p-5">
                   <div
                     className="prose max-w-none"
                     dangerouslySetInnerHTML={{ __html: brandPreviewHtml(bodyHtml) }}

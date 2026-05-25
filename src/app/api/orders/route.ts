@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 import { sendOrderConfirmationEmail } from "@/lib/email";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -16,6 +17,13 @@ type IncomingOrderItem = {
   quantity: number;
   unit_price: number;
 };
+
+function createSupabaseServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) return null;
+  return createClient(url, serviceKey, { auth: { persistSession: false } });
+}
 
 export async function POST(request: Request) {
   let raw: unknown;
@@ -52,7 +60,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Order items are required." }, { status: 400 });
   }
 
-  const supabase = await createSupabaseServerClient();
+  const service = createSupabaseServiceClient();
+  const supabase = service ? service : await createSupabaseServerClient();
 
   const { error: subscriberError } = await supabase
     .from("subscribers")

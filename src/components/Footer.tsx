@@ -11,6 +11,7 @@ export default function Footer() {
   const [success, setSuccess] = useState(
     () => Boolean(readSubscriberEmail()) || getCookie("bh_email_subscribed") === "1",
   );
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <footer className="mt-auto border-t border-white/15 bg-black text-white">
@@ -170,13 +171,24 @@ export default function Footer() {
                 className="flex w-full flex-col gap-3 sm:flex-row"
                 onSubmit={async (e) => {
                   e.preventDefault();
+                  setError(null);
                   const normalized = email.trim().toLowerCase();
-                  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) return;
-                  await fetch("/api/subscribe", {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify({ email: normalized, source: "footer" }),
-                  });
+                  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+                    setError("Enter a valid email address.");
+                    return;
+                  }
+                  try {
+                    const res = await fetch("/api/subscribe", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ email: normalized, source: "footer" }),
+                    });
+                    const json = (await res.json()) as { ok?: boolean; error?: string };
+                    if (!res.ok || !json.ok) throw new Error(json.error || "Failed to subscribe.");
+                  } catch (err) {
+                    setError((err as Error).message || "Failed to subscribe.");
+                    return;
+                  }
                   setCookie("bh_email_subscribed", "1", 365);
                   writeSubscriberEmail(normalized);
                   setSuccess(true);
@@ -185,7 +197,10 @@ export default function Footer() {
               >
                 <input
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setError(null);
+                  }}
                   type="email"
                   required
                   inputMode="email"
@@ -200,6 +215,9 @@ export default function Footer() {
                 </button>
               </form>
             )}
+            {!success && error ? (
+              <p className="text-sm font-semibold text-brand">{error}</p>
+            ) : null}
           </div>
 
           <div className="mt-6 text-center text-xs text-white/60">

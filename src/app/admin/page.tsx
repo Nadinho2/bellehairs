@@ -75,14 +75,20 @@ export default function AdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const [{ data: productData, error: productError }, { data: socialData, error: socialError }] =
-        await Promise.all([
-          supabase.from("products").select("*").order("created_at", { ascending: false }),
-          supabase.from("social_feed").select("*").order("slot_number", { ascending: true }),
-        ]);
-      if (productError) throw productError;
+      const [productsRes, { data: socialData, error: socialError }] = await Promise.all([
+        fetch("/api/admin/products", { method: "GET" }),
+        supabase.from("social_feed").select("*").order("slot_number", { ascending: true }),
+      ]);
       if (socialError) throw socialError;
-      setProducts((productData ?? []) as ProductRow[]);
+      const productsJson = (await productsRes.json()) as {
+        ok?: boolean;
+        rows?: ProductRow[];
+        error?: string;
+      };
+      if (!productsRes.ok || !productsJson.ok) {
+        throw new Error(productsJson.error || "Failed to load products.");
+      }
+      setProducts((productsJson.rows ?? []) as ProductRow[]);
       setSocial((socialData ?? []) as SocialFeedRow[]);
     } catch (e) {
       setError((e as Error).message || "Failed to load admin data.");
@@ -266,14 +272,14 @@ export default function AdminPage() {
                   is_featured: isFeatured,
                 };
 
-                if (editingId) {
-                  const { error } = await supabase.from("products").update(payload).eq("id", id);
-                  if (error) throw error;
-                } else {
-                  const { error } = await supabase.from("products").insert(payload);
-                  if (error) throw error;
-                  setEditingId(id);
-                }
+                const res = await fetch("/api/admin/products", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify(payload),
+                });
+                const json = (await res.json()) as { ok?: boolean; error?: string };
+                if (!res.ok || !json.ok) throw new Error(json.error || "Failed to save product.");
+                if (!editingId) setEditingId(id);
                 await loadAll();
               } catch (e2) {
                 setFormError((e2 as Error).message || "Failed to save product.");
@@ -385,23 +391,28 @@ export default function AdminPage() {
                 accept="image/*"
                 multiple
                 onChange={async (e) => {
+                  setFormError(null);
                   const files = Array.from(e.target.files ?? []);
                   if (!files.length) return;
                   const id = editingId ?? crypto.randomUUID();
                   if (!editingId) setEditingId(id);
-                  const urls: string[] = [];
-                  for (const file of files) {
-                    const safeName = file.name.replaceAll(" ", "-");
-                    const path = `${id}/${Date.now()}-${safeName}`;
-                    const url = await uploadPublicImage({
-                      bucket: "product-images",
-                      path,
-                      file,
-                    });
-                    urls.push(url);
+                  try {
+                    const urls: string[] = [];
+                    for (const file of files) {
+                      const safeName = file.name.replaceAll(" ", "-");
+                      const path = `${id}/${Date.now()}-${safeName}`;
+                      const url = await uploadPublicImage({
+                        bucket: "product-images",
+                        path,
+                        file,
+                      });
+                      urls.push(url);
+                    }
+                    setImages((prev) => [...prev, ...urls]);
+                    e.target.value = "";
+                  } catch (err) {
+                    setFormError((err as Error).message || "Failed to upload image.");
                   }
-                  setImages((prev) => [...prev, ...urls]);
-                  e.target.value = "";
                 }}
                 className="block w-full text-sm text-white/80 file:mr-4 file:rounded-full file:border-0 file:bg-brand file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-[#C2177A]"
               />
@@ -491,9 +502,14 @@ export default function AdminPage() {
                     onClick={async () => {
                       const ok = window.confirm(`Delete "${p.name}"?`);
                       if (!ok) return;
-                      const { error } = await supabase.from("products").delete().eq("id", p.id);
-                      if (error) {
-                        window.alert(error.message);
+                      const res = await fetch("/api/admin/products", {
+                        method: "DELETE",
+                        headers: { "content-type": "application/json" },
+                        body: JSON.stringify({ id: p.id }),
+                      });
+                      const json = (await res.json()) as { ok?: boolean; error?: string };
+                      if (!res.ok || !json.ok) {
+                        window.alert(json.error || "Failed to delete product.");
                         return;
                       }
                       if (editingId === p.id) resetForm();
@@ -558,20 +574,26 @@ export default function AdminPage() {
                       accept="image/*"
                       className="hidden"
                       onChange={async (e) => {
+                        setError(null);
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        const path = `slot-${slot}/${Date.now()}-${file.name.replaceAll(" ", "-")}`;
-                        const url = await uploadPublicImage({
-                          bucket: "social-feed-images",
-                          path,
-                          file,
-                        });
-                        await supabase.from("social_feed").upsert(
-                          { slot_number: slot, image_url: url },
-                          { onConflict: "slot_number" },
-                        );
-                        await loadAll();
-                        e.target.value = "";
+                        try {
+                          const path = `slot-${slot}/${Date.now()}-${file.name.replaceAll(" ", "-")}`;
+                          const url = await uploadPublicImage({
+                            bucket: "social-feed-images",
+                            path,
+                            file,
+                          });
+                          const { error } = await supabase.from("social_feed").upsert(
+                            { slot_number: slot, image_url: url },
+                            { onConflict: "slot_number" },
+                          );
+                          if (error) throw new Error(error.message);
+                          await loadAll();
+                          e.target.value = "";
+                        } catch (err) {
+                          setError((err as Error).message || "Failed to upload social image.");
+                        }
                       }}
                     />
                   </label>
