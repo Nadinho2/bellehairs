@@ -4,7 +4,7 @@ import { Resend } from "resend";
 
 import { defaultDeliveryFeeConfig, getDeliveryQuote } from "@/lib/delivery";
 
-const FROM = `"BelleHairs Owerri 💕" <hello@bellehairs.com>`;
+const FROM = `"BelleHairs Owerri 💕" <hello@boomkas.com>`;
 const BRAND_PINK = "#E91E8C";
 const SITE_URL = "https://bellehairs.vercel.app";
 
@@ -268,4 +268,3 @@ export async function sendCampaignEmail(params: {
     }),
   });
 }
-
