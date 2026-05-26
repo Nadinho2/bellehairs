@@ -99,6 +99,11 @@ export type OrderRow = {
   total_amount: number | null;
   status: OrderStatus;
   status_history?: OrderStatusHistoryEntry[] | null;
+  reminders_sent?: string[] | null;
+  reminder_stopped?: boolean | null;
+  reminder_paused?: boolean | null;
+  cancel_deadline_extended_hours?: number | null;
+  reminder_offers?: ReminderOffers | null;
   created_at: string;
 };
 
@@ -116,6 +121,12 @@ export type OrderStatusHistoryEntry = {
   at: string;
 };
 
+export type ReminderOffers = {
+  free_delivery?: boolean;
+  discount_code?: string;
+  free_wig_cap?: boolean;
+};
+
 export type OrderRowInsert = {
   customer_name: string;
   customer_email: string;
@@ -130,4 +141,18 @@ export type OrderRowInsert = {
   items: unknown;
   total_amount: number;
   status: OrderStatus;
+};
+
+export type PaymentReminderSettingsRow = {
+  id: string;
+  enabled: boolean | null;
+  reminder1_minutes: number | null;
+  reminder2_minutes: number | null;
+  reminder3_minutes: number | null;
+  reminder4_minutes: number | null;
+  reminder5_minutes: number | null;
+  auto_cancel_minutes: number | null;
+  discount_code: string | null;
+  created_at?: string;
+  updated_at?: string | null;
 };

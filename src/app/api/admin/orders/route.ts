@@ -128,10 +128,14 @@ export async function PATCH(request: Request) {
   const existingHistory = Array.isArray(order.status_history) ? order.status_history : [];
 
   let historyLogged = true;
-  const updatePayloadWithHistory = {
+  const updatePayloadWithHistory: Record<string, unknown> = {
     status: nextStatus,
     status_history: [...existingHistory, historyEntry],
   };
+  if (nextStatus !== "order_received") {
+    updatePayloadWithHistory.reminder_stopped = true;
+    updatePayloadWithHistory.reminder_paused = false;
+  }
 
   let updateError = (
     await supabase.from("orders").update(updatePayloadWithHistory).eq("id", id)
@@ -139,9 +143,33 @@ export async function PATCH(request: Request) {
 
   if (updateError) {
     const msgLower = (updateError.message || "").toLowerCase();
+    const missingReminderCols =
+      (msgLower.includes("reminder_stopped") && msgLower.includes("does not exist")) ||
+      (msgLower.includes("reminder_paused") && msgLower.includes("does not exist"));
     if (msgLower.includes("status_history") && msgLower.includes("does not exist")) {
       historyLogged = false;
-      updateError = (await supabase.from("orders").update({ status: nextStatus }).eq("id", id)).error;
+      const payload: Record<string, unknown> = { status: nextStatus };
+      if (nextStatus !== "order_received") {
+        payload.reminder_stopped = true;
+        payload.reminder_paused = false;
+      }
+      const res = await supabase.from("orders").update(payload).eq("id", id);
+      updateError = res.error;
+      if (updateError) {
+        const lower2 = (updateError.message || "").toLowerCase();
+        const missing2 =
+          (lower2.includes("reminder_stopped") && lower2.includes("does not exist")) ||
+          (lower2.includes("reminder_paused") && lower2.includes("does not exist"));
+        if (missing2) {
+          updateError = (await supabase.from("orders").update({ status: nextStatus }).eq("id", id)).error;
+        }
+      }
+    } else if (missingReminderCols) {
+      const fallbackPayload: Record<string, unknown> = {
+        status: nextStatus,
+        status_history: updatePayloadWithHistory.status_history,
+      };
+      updateError = (await supabase.from("orders").update(fallbackPayload).eq("id", id)).error;
     }
   }
 

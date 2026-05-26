@@ -74,12 +74,74 @@ function formatHistoryLine(e: OrderStatusHistoryEntry) {
   return `${fromLabel} → ${statusLabel(e.to)}${time && date ? ` at ${time} on ${date}` : ""}`;
 }
 
+type ReminderSettings = {
+  enabled: boolean;
+  reminder1_minutes: number;
+  reminder2_minutes: number;
+  reminder3_minutes: number;
+  reminder4_minutes: number;
+  reminder5_minutes: number;
+  auto_cancel_minutes: number;
+  discount_code: string;
+};
+
+const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
+  enabled: true,
+  reminder1_minutes: 60,
+  reminder2_minutes: 6 * 60,
+  reminder3_minutes: 24 * 60,
+  reminder4_minutes: 48 * 60,
+  reminder5_minutes: 72 * 60,
+  auto_cancel_minutes: 96 * 60,
+  discount_code: "BELLE5",
+};
+
+type ReminderCode = "R1" | "R2" | "R3" | "R4" | "R5";
+
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.map((v) => String(v).trim()).filter(Boolean)));
+}
+
+function nextDueReminder(params: { ageMinutes: number; remindersSent: string[]; settings: ReminderSettings }) {
+  const sent = new Set(params.remindersSent);
+  const plan: Array<{ code: ReminderCode; at: number }> = [
+    { code: "R1", at: params.settings.reminder1_minutes },
+    { code: "R2", at: params.settings.reminder2_minutes },
+    { code: "R3", at: params.settings.reminder3_minutes },
+    { code: "R4", at: params.settings.reminder4_minutes },
+    { code: "R5", at: params.settings.reminder5_minutes },
+  ];
+  for (const step of plan) {
+    if (params.ageMinutes >= step.at && !sent.has(step.code)) return step.code;
+  }
+  return null;
+}
+
+function formatMinutesAsCountdown(m: number) {
+  const mins = Math.max(0, Math.floor(m));
+  const h = Math.floor(mins / 60);
+  const r = mins % 60;
+  if (h <= 0) return `${r} min`;
+  if (r === 0) return `${h} hr`;
+  return `${h} hr ${r} min`;
+}
+
+function remindersLine(remindersSent: string[]) {
+  const sent = new Set(remindersSent);
+  const parts: string[] = [];
+  for (const code of ["R1", "R2", "R3", "R4", "R5"] as const) {
+    parts.push(`${sent.has(code) ? "✅" : "⏳"} ${code}`);
+  }
+  return parts.join(" ");
+}
+
 export default function AdminOrdersPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [reminderSettings, setReminderSettings] = useState<ReminderSettings>(DEFAULT_REMINDER_SETTINGS);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -104,6 +166,23 @@ export default function AdminOrdersPage() {
     }, 0);
     return () => window.clearTimeout(t);
   }, [loadAll]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch("/api/admin/reminder-settings", { method: "GET" });
+          const json = (await res.json()) as { ok?: boolean; settings?: ReminderSettings; defaults?: ReminderSettings };
+          if (res.ok && json.ok && json.settings) {
+            setReminderSettings(json.settings);
+          } else if (json.defaults) {
+            setReminderSettings(json.defaults);
+          }
+        } catch {}
+      })();
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, []);
 
   if (loading) {
     return (
@@ -133,6 +212,12 @@ export default function AdminOrdersPage() {
             Refresh
           </button>
           <Link
+            href="/admin/settings"
+            className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
+          >
+            Reminder settings
+          </Link>
+          <Link
             href="/admin"
             className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
           >
@@ -151,6 +236,23 @@ export default function AdminOrdersPage() {
             <div key={o.id} className="rounded-3xl border border-border bg-card p-6 text-white">
               {(() => {
                 const currentStatus = normalizeStatus(String(o.status));
+                const createdMs = o.created_at ? new Date(o.created_at).getTime() : 0;
+                const ageMinutes = createdMs ? Math.floor((Date.now() - createdMs) / 60_000) : 0;
+                const remindersSent = uniqueStrings(Array.isArray(o.reminders_sent) ? o.reminders_sent : []);
+                const nextDue = nextDueReminder({ ageMinutes, remindersSent, settings: reminderSettings });
+                const nextAtMinutes =
+                  nextDue === "R1"
+                    ? reminderSettings.reminder1_minutes
+                    : nextDue === "R2"
+                      ? reminderSettings.reminder2_minutes
+                      : nextDue === "R3"
+                        ? reminderSettings.reminder3_minutes
+                        : nextDue === "R4"
+                          ? reminderSettings.reminder4_minutes
+                          : nextDue === "R5"
+                            ? reminderSettings.reminder5_minutes
+                            : null;
+                const minutesUntilNext = typeof nextAtMinutes === "number" ? Math.max(0, nextAtMinutes - ageMinutes) : null;
                 return (
                   <>
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -186,6 +288,37 @@ export default function AdminOrdersPage() {
                   <p className="mt-2 text-xs text-white/50">
                     {o.created_at ? new Date(o.created_at).toLocaleString() : ""}
                   </p>
+                  <div className="mt-3 rounded-2xl border border-white/10 bg-black/40 p-4">
+                    <p className="text-xs font-semibold text-white/70">Reminders</p>
+                    <p className="mt-1 text-sm font-semibold text-white">{remindersLine(remindersSent)}</p>
+                    {o.reminder_paused ? (
+                      <p className="mt-1 text-xs text-white/70">Paused by admin</p>
+                    ) : o.reminder_stopped ? (
+                      <p className="mt-1 text-xs text-white/70">Stopped</p>
+                    ) : currentStatus !== "order_received" ? (
+                      <p className="mt-1 text-xs text-white/70">Not applicable (paid/processed)</p>
+                    ) : nextDue ? (
+                      <p className="mt-1 text-xs text-white/70">
+                        Next: {nextDue}
+                        {minutesUntilNext !== null ? ` in ${formatMinutesAsCountdown(minutesUntilNext)}` : ""}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-xs text-white/70">No more reminders scheduled</p>
+                    )}
+                    {o.reminder_offers &&
+                    (o.reminder_offers.free_delivery || o.reminder_offers.discount_code || o.reminder_offers.free_wig_cap) ? (
+                      <p className="mt-2 text-xs text-white/70">
+                        Offers:{" "}
+                        {[
+                          o.reminder_offers.free_delivery ? "Free delivery" : null,
+                          o.reminder_offers.discount_code ? `Discount ${o.reminder_offers.discount_code}` : null,
+                          o.reminder_offers.free_wig_cap ? "Free wig cap" : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" • ")}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
@@ -245,6 +378,107 @@ export default function AdminOrdersPage() {
                   >
                     WhatsApp
                   </a>
+                  {currentStatus === "order_received" ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={savingId === o.id}
+                        onClick={async () => {
+                          const nextAction = o.reminder_paused ? "resume" : "pause";
+                          const ok = window.confirm(
+                            `${o.reminder_paused ? "Resume" : "Pause"} reminders for this order?`,
+                          );
+                          if (!ok) return;
+                          setSavingId(o.id);
+                          try {
+                            const res = await fetch("/api/admin/order-reminders", {
+                              method: "POST",
+                              headers: { "content-type": "application/json" },
+                              body: JSON.stringify({ id: o.id, action: nextAction }),
+                            });
+                            const json = (await res.json()) as { ok?: boolean; error?: string };
+                            if (!res.ok || !json.ok) throw new Error(json.error || "Failed to update reminders.");
+                            await loadAll();
+                          } catch (err) {
+                            window.alert((err as Error).message || "Failed to update reminders.");
+                          } finally {
+                            setSavingId(null);
+                          }
+                        }}
+                        className="inline-flex items-center justify-center rounded-full border border-white/20 bg-black px-5 py-2 text-sm font-semibold text-white hover:border-brand/60 disabled:opacity-60"
+                      >
+                        {o.reminder_paused ? "Resume reminders" : "Pause reminders"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={savingId === o.id}
+                        onClick={async () => {
+                          const ok = window.confirm(
+                            "Extend auto-cancel deadline by 24 hours? This helps if you’re chatting with the customer.",
+                          );
+                          if (!ok) return;
+                          setSavingId(o.id);
+                          try {
+                            const res = await fetch("/api/admin/order-reminders", {
+                              method: "POST",
+                              headers: { "content-type": "application/json" },
+                              body: JSON.stringify({ id: o.id, action: "extend_cancel_24h" }),
+                            });
+                            const json = (await res.json()) as { ok?: boolean; error?: string };
+                            if (!res.ok || !json.ok) throw new Error(json.error || "Failed to extend deadline.");
+                            await loadAll();
+                          } catch (err) {
+                            window.alert((err as Error).message || "Failed to extend deadline.");
+                          } finally {
+                            setSavingId(null);
+                          }
+                        }}
+                        className="inline-flex items-center justify-center rounded-full border border-white/20 bg-black px-5 py-2 text-sm font-semibold text-white hover:border-brand/60 disabled:opacity-60"
+                      >
+                        Extend 24h
+                      </button>
+                      <select
+                        disabled={savingId === o.id}
+                        defaultValue=""
+                        onChange={async (e) => {
+                          const code = e.target.value as ReminderCode | "";
+                          if (!code) return;
+                          e.currentTarget.value = "";
+                          const ok = window.confirm(`Send ${code} now? This will email the customer immediately.`);
+                          if (!ok) return;
+                          setSavingId(o.id);
+                          try {
+                            const res = await fetch("/api/admin/order-reminders", {
+                              method: "POST",
+                              headers: { "content-type": "application/json" },
+                              body: JSON.stringify({
+                                id: o.id,
+                                action: "trigger_reminder",
+                                reminder: code,
+                                discount_code: reminderSettings.discount_code,
+                              }),
+                            });
+                            const json = (await res.json()) as { ok?: boolean; error?: string };
+                            if (!res.ok || !json.ok) throw new Error(json.error || "Failed to send reminder.");
+                            await loadAll();
+                          } catch (err) {
+                            window.alert((err as Error).message || "Failed to send reminder.");
+                          } finally {
+                            setSavingId(null);
+                          }
+                        }}
+                        className="h-10 rounded-full border border-white/15 bg-black/40 px-4 text-sm font-semibold text-white outline-none focus:ring-2 focus:ring-brand/40 disabled:opacity-60"
+                        aria-label="Send reminder"
+                      >
+                        <option value="">Send reminder…</option>
+                        <option value="R1">Send R1</option>
+                        <option value="R2">Send R2</option>
+                        <option value="R3">Send R3</option>
+                        <option value="R4">Send R4</option>
+                        <option value="R5">Send R5</option>
+                      </select>
+                    </>
+                  ) : null}
                 </div>
               </div>
 

@@ -297,6 +297,12 @@ export default function AdminPage() {
             Orders
           </Link>
           <Link
+            href="/admin/settings"
+            className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
+          >
+            Reminders
+          </Link>
+          <Link
             href="/admin/reviews"
             className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
           >

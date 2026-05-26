@@ -403,6 +403,236 @@ export async function sendOrderStatusEmail(params: {
   });
 }
 
+export type PaymentReminderCode = "R1" | "R2" | "R3" | "R4" | "R5";
+
+function storeWhatsAppHref(params: { customerName: string; orderId: string; message: string }) {
+  const greetingName = params.customerName.trim().split(/\s+/)[0] || params.customerName.trim() || "there";
+  const full = `Hi BelleHairs Owerri,\n\n${params.message}\n\nCustomer: ${greetingName}\nOrder ID: ${params.orderId}\n\nI am sending my payment proof now.`;
+  return `https://wa.me/2349126914795?text=${encodeURIComponent(full)}`;
+}
+
+function paymentInstructionsHtml() {
+  return `
+    <div style="margin-top:14px;background:#fff7fb;border:1px solid #ffd0e7;border-radius:14px;padding:14px;">
+      <div style="font-weight:900;color:#111;font-size:14px;">Payment instructions</div>
+      <div style="margin-top:6px;color:#444;font-size:14px;line-height:22px;">
+        Simply make payment via bank transfer and send your proof of payment to <strong>0912 691 4795</strong> on WhatsApp to confirm your order.
+      </div>
+    </div>
+  `;
+}
+
+export async function sendPaymentReminderEmail(params: {
+  to: string;
+  customerName: string;
+  orderId: string;
+  reminder: PaymentReminderCode;
+  items: OrderEmailItem[];
+  totalAmount: number;
+  deliveryFee: number;
+  discountCode?: string;
+}) {
+  const name = escapeHtml(params.customerName);
+  const itemsHtml = orderItemsTable(params.items);
+
+  const baseOrderSummaryHtml = (opts?: { totalOverride?: number; deliveryFeeOverride?: number; showFreeDelivery?: boolean }) => {
+    const deliveryFeeShown =
+      typeof opts?.deliveryFeeOverride === "number" ? opts.deliveryFeeOverride : params.deliveryFee;
+    const totalShown = typeof opts?.totalOverride === "number" ? opts.totalOverride : params.totalAmount;
+    const showFree = Boolean(opts?.showFreeDelivery);
+
+    const deliveryFeeCell = showFree
+      ? `<span style="text-decoration:line-through;color:#999;">${formatNaira(params.deliveryFee)}</span>
+         <span style="margin-left:8px;color:${BRAND_PINK};font-weight:900;">${formatNaira(0)} FREE</span>`
+      : `${formatNaira(deliveryFeeShown)}`;
+
+    return `
+      <div style="border:1px solid #eee;border-radius:14px;padding:14px;">
+        <div style="font-weight:900;color:#111;font-size:14px;margin-bottom:10px;">Order Summary</div>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
+          ${itemsHtml}
+          <tr>
+            <td style="padding:10px 0;color:#666;font-size:13px;">Delivery fee</td>
+            <td align="right" style="padding:10px 0;color:#111;font-weight:900;font-size:13px;">
+              ${deliveryFeeCell}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:12px 0;border-top:1px solid #eee;color:#111;font-weight:900;font-size:14px;">Total</td>
+            <td align="right" style="padding:12px 0;border-top:1px solid #eee;color:${BRAND_PINK};font-weight:900;font-size:16px;">
+              ${formatNaira(totalShown)}
+            </td>
+          </tr>
+        </table>
+      </div>
+    `;
+  };
+
+  const subject = (() => {
+    switch (params.reminder) {
+      case "R1":
+        return `👀 Hey ${params.customerName}, you forgot something!`;
+      case "R2":
+        return `⏰ ${params.customerName}, your order expires soon!`;
+      case "R3":
+        return "💕 We saved your order + a little gift from us";
+      case "R4":
+        return `🔥 ${params.customerName}, here's 5% off — today only`;
+      case "R5":
+        return `😢 ${params.customerName}, this is goodbye...`;
+    }
+  })();
+
+  const cta = (() => {
+    switch (params.reminder) {
+      case "R1":
+        return { label: "Complete My Order", message: "I want to complete my order." };
+      case "R2":
+        return { label: "Secure My Order Now", message: "I want to secure my order now." };
+      case "R3":
+        return { label: "Claim Free Delivery", message: "I want to claim the FREE delivery offer for my order." };
+      case "R4":
+        return {
+          label: "Use My 5% Discount",
+          message: `I want to use the 5% discount code ${(params.discountCode ?? "BELLE5").trim()} for my order.`,
+        };
+      case "R5":
+        return { label: "Claim My Free Wig Cap", message: "I want to claim the FREE wig cap offer for my order." };
+    }
+  })();
+
+  const ctaHref = storeWhatsAppHref({
+    customerName: params.customerName,
+    orderId: params.orderId,
+    message: cta.message,
+  });
+
+  const introHtml = (() => {
+    switch (params.reminder) {
+      case "R1":
+        return `
+          <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">👀 Hey ${name}, you forgot something!</h1>
+          <p style="margin:0 0 10px 0;color:#444;line-height:22px;font-size:14px;">Hi <strong>${name}</strong>! 💕</p>
+          <p style="margin:0 0 10px 0;color:#444;line-height:22px;font-size:14px;">
+            We noticed you placed an order with us but haven't completed your payment yet.
+          </p>
+          <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
+            No worries — your hair is still waiting for you! We're holding your order for the next 24 hours.
+          </p>
+        `;
+      case "R2":
+        return `
+          <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">⏰ ${name}, your order expires soon!</h1>
+          <p style="margin:0 0 10px 0;color:#444;line-height:22px;font-size:14px;">Hi <strong>${name}</strong>!</p>
+          <p style="margin:0 0 10px 0;color:#444;line-height:22px;font-size:14px;">
+            Your order is about to be released back to stock! ⚠️
+          </p>
+          <p style="margin:0 0 10px 0;color:#444;line-height:22px;font-size:14px;">
+            We can only hold your hair for a limited time and other customers are waiting for this exact unit.
+          </p>
+          <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
+            Complete your payment in the next few hours to secure your hair before it's gone!
+          </p>
+        `;
+      case "R3":
+        return `
+          <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">💕 We saved your order + a little gift from us</h1>
+          <p style="margin:0 0 10px 0;color:#444;line-height:22px;font-size:14px;">
+            Hi <strong>${name}</strong>, we really want you to have this hair! 💕
+          </p>
+          <p style="margin:0 0 10px 0;color:#444;line-height:22px;font-size:14px;">
+            If you complete your payment <strong>TODAY</strong>, we will cover your delivery fee completely. That means <strong>FREE delivery</strong> to your door, no matter where you are in Nigeria! 🚚
+          </p>
+          <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
+            This offer is only available for the next 24 hours. Don't miss it!
+          </p>
+        `;
+      case "R4": {
+        const code = (params.discountCode ?? "BELLE5").trim() || "BELLE5";
+        const savingsRaw = Math.round((Number(params.totalAmount) || 0) * 0.05);
+        const savings = savingsRaw > 0 ? savingsRaw : 0;
+        const newTotal = Math.max(0, (Number(params.totalAmount) || 0) - savings);
+        return `
+          <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">🔥 ${name}, here's 5% off — today only</h1>
+          <p style="margin:0 0 10px 0;color:#444;line-height:22px;font-size:14px;">
+            Hi <strong>${name}</strong>! We don't do this often but we really want you to slay in this hair! 👑
+          </p>
+          <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
+            Use the code below for 5% off your order total — but hurry, this expires in 24 hours and won't be available again!
+          </p>
+          <div style="background:#fff7fb;border:1px solid #ffd0e7;border-radius:14px;padding:14px;margin:12px 0 14px 0;">
+            <div style="font-size:12px;color:#555;font-weight:800;letter-spacing:0.08em;">DISCOUNT CODE</div>
+            <div style="font-size:28px;color:${BRAND_PINK};font-weight:900;letter-spacing:0.08em;margin-top:6px;">${escapeHtml(
+              code,
+            )}</div>
+            <div style="margin-top:10px;font-size:13px;color:#444;line-height:20px;">
+              You save: <strong>${formatNaira(savings)}</strong><br />
+              New total: <strong style="color:${BRAND_PINK};">${formatNaira(newTotal)}</strong>
+            </div>
+          </div>
+          <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
+            Simply mention this code when you send your payment proof on WhatsApp!
+          </p>
+        `;
+      }
+      case "R5":
+        return `
+          <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">😢 ${name}, this is goodbye...</h1>
+          <p style="margin:0 0 10px 0;color:#444;line-height:22px;font-size:14px;">Hi <strong>${name}</strong>...</p>
+          <p style="margin:0 0 10px 0;color:#444;line-height:22px;font-size:14px;">
+            We're really sad to say this but we are about to cancel your order and release your hair to the next customer. 💔
+          </p>
+          <p style="margin:0 0 10px 0;color:#444;line-height:22px;font-size:14px;">
+            This is your absolute last chance to secure it.
+          </p>
+          <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
+            Pay today and we'll throw in a <strong>FREE wig cap</strong> as our gift to you 🎁 (worth ₦2,500).
+            After today, your order will be automatically cancelled and this offer disappears forever.
+          </p>
+        `;
+    }
+  })();
+
+  const summaryHtml = (() => {
+    if (params.reminder === "R3") {
+      const newTotal = Math.max(0, (Number(params.totalAmount) || 0) - (Number(params.deliveryFee) || 0));
+      return baseOrderSummaryHtml({ totalOverride: newTotal, deliveryFeeOverride: 0, showFreeDelivery: true });
+    }
+    if (params.reminder === "R4") {
+      const savingsRaw = Math.round((Number(params.totalAmount) || 0) * 0.05);
+      const savings = savingsRaw > 0 ? savingsRaw : 0;
+      const newTotal = Math.max(0, (Number(params.totalAmount) || 0) - savings);
+      return baseOrderSummaryHtml({ totalOverride: newTotal });
+    }
+    return baseOrderSummaryHtml();
+  })();
+
+  const bodyHtml = `
+    <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#111;">
+      ${introHtml}
+      ${summaryHtml}
+      ${paymentInstructionsHtml()}
+      <div style="margin-top:14px;">
+        ${primaryButton(ctaHref, cta.label)}
+      </div>
+      <p style="margin:14px 0 0 0;color:#666;line-height:20px;font-size:12px;">
+        Order ID: ${escapeHtml(params.orderId)}
+      </p>
+    </div>
+  `;
+
+  await sendEmail({
+    to: params.to,
+    subject,
+    html: wrapEmail({
+      title: subject,
+      preheader: `Payment reminder • BelleHairs Owerri`,
+      bodyHtml,
+      unsubscribeHref: unsubscribeUrl(params.to),
+    }),
+  });
+}
+
 export async function sendCampaignEmail(params: {
   to: string;
   subject: string;
