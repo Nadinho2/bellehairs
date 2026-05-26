@@ -103,7 +103,19 @@ export async function POST(request: Request) {
   }
 
   if (orderError) {
-    return NextResponse.json({ ok: false, error: orderError.message }, { status: 500 });
+    const msg = orderError.message || "Failed to place order.";
+    const lower = msg.toLowerCase();
+    if (lower.includes("orders_status_check") || lower.includes("violates check constraint")) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Orders table status check constraint is still using the old statuses. Update the orders_status_check constraint in Supabase to allow: order_received, payment_received, order_confirmed, dispatched, delivered, cancelled.",
+        },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
 
   let emailSent = true;

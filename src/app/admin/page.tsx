@@ -142,7 +142,8 @@ export default function AdminPage() {
       ).error;
       if (categoryError) {
         const msg = categoryError.message || "";
-        if (msg.toLowerCase().includes("does not exist")) {
+        const lower = msg.toLowerCase();
+        if (lower.includes("does not exist") || lower.includes("schema cache")) {
           setError(
             'Homepage category images table is missing in Supabase. Create "homepage_category_cards" with columns: category (text, unique) and image_url (text).',
           );

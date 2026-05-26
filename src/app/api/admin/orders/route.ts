@@ -146,7 +146,8 @@ export async function PATCH(request: Request) {
   }
 
   if (updateError) {
-    const msgLower = (updateError.message || "").toLowerCase();
+    const msg = updateError.message || "Failed to update order status.";
+    const msgLower = msg.toLowerCase();
     if (
       (msgLower.includes("row-level security") || msgLower.includes("violates row-level security")) &&
       !service
@@ -160,7 +161,17 @@ export async function PATCH(request: Request) {
         { status: 403 },
       );
     }
-    return NextResponse.json({ ok: false, error: updateError.message }, { status: 500 });
+    if (msgLower.includes("orders_status_check") || msgLower.includes("violates check constraint")) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Orders table status check constraint is still using the old statuses. Update the orders_status_check constraint in Supabase to allow: order_received, payment_received, order_confirmed, dispatched, delivered, cancelled.",
+        },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
 
   const items = coerceOrderEmailItems(order.items);

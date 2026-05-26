@@ -254,7 +254,7 @@ export default function ProductDetailClient(props: {
 
       {lightboxSrc ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4"
           onClick={() => setLightboxSrc(null)}
           role="dialog"
           aria-modal="true"
@@ -263,7 +263,7 @@ export default function ProductDetailClient(props: {
             className="relative w-full max-w-4xl overflow-hidden rounded-3xl border border-white/10 bg-black"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="relative aspect-[4/3] w-full">
+            <div className="relative h-[70vh] w-full sm:h-[78vh]">
               <Image src={lightboxSrc} alt={product.name} fill className="object-contain" unoptimized />
             </div>
             <div className="flex items-center justify-between gap-4 border-t border-white/10 bg-black/60 px-4 py-3">
