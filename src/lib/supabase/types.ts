@@ -73,6 +73,39 @@ export type EmailCampaignRow = {
   created_at: string;
 };
 
+export type EmailTemplateCategory = "payment_reminder" | "system" | "marketing";
+
+export type EmailTemplateRow = {
+  key: string;
+  name: string;
+  category: EmailTemplateCategory | string;
+  subject: string;
+  body_html: string;
+  offer: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string | null;
+  updated_by?: string | null;
+};
+
+export type OrderEmailEventKind = "payment_reminder" | "system" | "marketing";
+
+export type OrderEmailEventRow = {
+  id: string;
+  order_id: string;
+  template_key: string;
+  template_name: string | null;
+  kind: OrderEmailEventKind | string;
+  reminder_code: string | null;
+  sent_to: string;
+  subject: string;
+  body_html: string;
+  offer: Record<string, unknown> | null;
+  sent_by: string | null;
+  sent_by_email: string | null;
+  sent_at: string;
+  created_at: string;
+};
+
 export type ReviewRow = {
   id: string;
   customer_name: string;
@@ -99,11 +132,6 @@ export type OrderRow = {
   total_amount: number | null;
   status: OrderStatus;
   status_history?: OrderStatusHistoryEntry[] | null;
-  reminders_sent?: string[] | null;
-  reminder_stopped?: boolean | null;
-  reminder_paused?: boolean | null;
-  cancel_deadline_extended_hours?: number | null;
-  reminder_offers?: ReminderOffers | null;
   created_at: string;
 };
 
@@ -121,12 +149,6 @@ export type OrderStatusHistoryEntry = {
   at: string;
 };
 
-export type ReminderOffers = {
-  free_delivery?: boolean;
-  discount_code?: string;
-  free_wig_cap?: boolean;
-};
-
 export type OrderRowInsert = {
   customer_name: string;
   customer_email: string;
@@ -141,18 +163,4 @@ export type OrderRowInsert = {
   items: unknown;
   total_amount: number;
   status: OrderStatus;
-};
-
-export type PaymentReminderSettingsRow = {
-  id: string;
-  enabled: boolean | null;
-  reminder1_minutes: number | null;
-  reminder2_minutes: number | null;
-  reminder3_minutes: number | null;
-  reminder4_minutes: number | null;
-  reminder5_minutes: number | null;
-  auto_cancel_minutes: number | null;
-  discount_code: string | null;
-  created_at?: string;
-  updated_at?: string | null;
 };

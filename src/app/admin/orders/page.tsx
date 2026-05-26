@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { formatPrice } from "@/lib/format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { OrderRow, OrderStatus, OrderStatusHistoryEntry } from "@/lib/supabase/types";
+import type { OrderEmailEventRow, OrderRow, OrderStatus, OrderStatusHistoryEntry } from "@/lib/supabase/types";
 
 function toWhatsAppNumber(input: string) {
   const digits = (input ?? "").replace(/\D/g, "");
@@ -74,65 +74,48 @@ function formatHistoryLine(e: OrderStatusHistoryEntry) {
   return `${fromLabel} → ${statusLabel(e.to)}${time && date ? ` at ${time} on ${date}` : ""}`;
 }
 
-type ReminderSettings = {
-  enabled: boolean;
-  reminder1_minutes: number;
-  reminder2_minutes: number;
-  reminder3_minutes: number;
-  reminder4_minutes: number;
-  reminder5_minutes: number;
-  auto_cancel_minutes: number;
-  discount_code: string;
-};
-
-const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
-  enabled: true,
-  reminder1_minutes: 60,
-  reminder2_minutes: 6 * 60,
-  reminder3_minutes: 24 * 60,
-  reminder4_minutes: 48 * 60,
-  reminder5_minutes: 72 * 60,
-  auto_cancel_minutes: 96 * 60,
-  discount_code: "BELLE5",
-};
-
 type ReminderCode = "R1" | "R2" | "R3" | "R4" | "R5";
 
-function uniqueStrings(values: string[]) {
-  return Array.from(new Set(values.map((v) => String(v).trim()).filter(Boolean)));
+function reminderTemplateKey(code: ReminderCode) {
+  if (code === "R1") return "payment_reminder_r1";
+  if (code === "R2") return "payment_reminder_r2";
+  if (code === "R3") return "payment_reminder_r3";
+  if (code === "R4") return "payment_reminder_r4";
+  return "payment_reminder_r5";
 }
 
-function nextDueReminder(params: { ageMinutes: number; remindersSent: string[]; settings: ReminderSettings }) {
-  const sent = new Set(params.remindersSent);
-  const plan: Array<{ code: ReminderCode; at: number }> = [
-    { code: "R1", at: params.settings.reminder1_minutes },
-    { code: "R2", at: params.settings.reminder2_minutes },
-    { code: "R3", at: params.settings.reminder3_minutes },
-    { code: "R4", at: params.settings.reminder4_minutes },
-    { code: "R5", at: params.settings.reminder5_minutes },
-  ];
-  for (const step of plan) {
-    if (params.ageMinutes >= step.at && !sent.has(step.code)) return step.code;
+function reminderLabel(code: ReminderCode) {
+  if (code === "R1") return "Reminder 1";
+  if (code === "R2") return "Reminder 2";
+  if (code === "R3") return "Reminder 3";
+  if (code === "R4") return "Reminder 4";
+  return "Reminder 5";
+}
+
+function formatDateTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleString("en-NG", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
   }
-  return null;
 }
 
-function formatMinutesAsCountdown(m: number) {
-  const mins = Math.max(0, Math.floor(m));
-  const h = Math.floor(mins / 60);
-  const r = mins % 60;
-  if (h <= 0) return `${r} min`;
-  if (r === 0) return `${h} hr`;
-  return `${h} hr ${r} min`;
-}
-
-function remindersLine(remindersSent: string[]) {
-  const sent = new Set(remindersSent);
+function offerSummary(offerRaw: unknown) {
+  const offer = offerRaw && typeof offerRaw === "object" ? (offerRaw as Record<string, unknown>) : {};
   const parts: string[] = [];
-  for (const code of ["R1", "R2", "R3", "R4", "R5"] as const) {
-    parts.push(`${sent.has(code) ? "✅" : "⏳"} ${code}`);
-  }
-  return parts.join(" ");
+  if (offer.free_delivery) parts.push("Free delivery");
+  if (offer.free_wig_cap) parts.push("Free wig cap");
+  const code = typeof offer.discount_code === "string" ? offer.discount_code.trim() : "";
+  const pct = Number(offer.discount_percent ?? 0);
+  if (code && Number.isFinite(pct) && pct > 0) parts.push(`${Math.round(pct)}% off (${code})`);
+  else if (code) parts.push(`Discount (${code})`);
+  return parts.join(" • ");
 }
 
 export default function AdminOrdersPage() {
@@ -141,7 +124,21 @@ export default function AdminOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [reminderSettings, setReminderSettings] = useState<ReminderSettings>(DEFAULT_REMINDER_SETTINGS);
+
+  const [emailEvents, setEmailEvents] = useState<OrderEmailEventRow[]>([]);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [eventsLoading, setEventsLoading] = useState(false);
+
+  const [reminderModalOrderId, setReminderModalOrderId] = useState<string | null>(null);
+  const [selectedReminder, setSelectedReminder] = useState<ReminderCode | "">("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [preview, setPreview] = useState<{
+    alreadySent: boolean;
+    subject: string;
+    html: string;
+    existingEvent: OrderEmailEventRow | null;
+  } | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -160,6 +157,27 @@ export default function AdminOrdersPage() {
     }
   }, [supabase]);
 
+  const loadEmailEvents = useCallback(async (orderIds: string[]) => {
+    const ids = Array.from(new Set(orderIds.map((x) => String(x).trim()).filter(Boolean))).slice(0, 200);
+    if (!ids.length) {
+      setEmailEvents([]);
+      return;
+    }
+    setEventsLoading(true);
+    setEventsError(null);
+    try {
+      const res = await fetch(`/api/admin/order-email-events?ids=${encodeURIComponent(ids.join(","))}`, { method: "GET" });
+      const json = (await res.json()) as { ok?: boolean; events?: OrderEmailEventRow[]; error?: string };
+      if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load order email events.");
+      setEmailEvents(json.events ?? []);
+    } catch (err) {
+      setEmailEvents([]);
+      setEventsError((err as Error).message || "Failed to load order email events.");
+    } finally {
+      setEventsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const t = window.setTimeout(() => {
       void loadAll();
@@ -169,20 +187,24 @@ export default function AdminOrdersPage() {
 
   useEffect(() => {
     const t = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const res = await fetch("/api/admin/reminder-settings", { method: "GET" });
-          const json = (await res.json()) as { ok?: boolean; settings?: ReminderSettings; defaults?: ReminderSettings };
-          if (res.ok && json.ok && json.settings) {
-            setReminderSettings(json.settings);
-          } else if (json.defaults) {
-            setReminderSettings(json.defaults);
-          }
-        } catch {}
-      })();
+      void loadEmailEvents(orders.map((o) => o.id));
     }, 0);
     return () => window.clearTimeout(t);
-  }, []);
+  }, [loadEmailEvents, orders]);
+
+  const eventsByOrderId = useMemo(() => {
+    const map = new Map<string, OrderEmailEventRow[]>();
+    for (const e of emailEvents) {
+      const id = String(e.order_id ?? "");
+      if (!id) continue;
+      map.set(id, [...(map.get(id) ?? []), e]);
+    }
+    for (const [k, v] of map.entries()) {
+      v.sort((a, b) => String(b.sent_at ?? "").localeCompare(String(a.sent_at ?? "")));
+      map.set(k, v);
+    }
+    return map;
+  }, [emailEvents]);
 
   if (loading) {
     return (
@@ -212,10 +234,10 @@ export default function AdminOrdersPage() {
             Refresh
           </button>
           <Link
-            href="/admin/settings"
+            href="/admin/email-templates"
             className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
           >
-            Reminder settings
+            Email Templates
           </Link>
           <Link
             href="/admin"
@@ -236,23 +258,18 @@ export default function AdminOrdersPage() {
             <div key={o.id} className="rounded-3xl border border-border bg-card p-6 text-white">
               {(() => {
                 const currentStatus = normalizeStatus(String(o.status));
-                const createdMs = o.created_at ? new Date(o.created_at).getTime() : 0;
-                const ageMinutes = createdMs ? Math.floor((Date.now() - createdMs) / 60_000) : 0;
-                const remindersSent = uniqueStrings(Array.isArray(o.reminders_sent) ? o.reminders_sent : []);
-                const nextDue = nextDueReminder({ ageMinutes, remindersSent, settings: reminderSettings });
-                const nextAtMinutes =
-                  nextDue === "R1"
-                    ? reminderSettings.reminder1_minutes
-                    : nextDue === "R2"
-                      ? reminderSettings.reminder2_minutes
-                      : nextDue === "R3"
-                        ? reminderSettings.reminder3_minutes
-                        : nextDue === "R4"
-                          ? reminderSettings.reminder4_minutes
-                          : nextDue === "R5"
-                            ? reminderSettings.reminder5_minutes
-                            : null;
-                const minutesUntilNext = typeof nextAtMinutes === "number" ? Math.max(0, nextAtMinutes - ageMinutes) : null;
+                const orderEvents = eventsByOrderId.get(o.id) ?? [];
+                const reminderEvents = orderEvents.filter((e) => String(e.kind) === "payment_reminder");
+                const reminderByCode = new Map<ReminderCode, OrderEmailEventRow>();
+                for (const e of reminderEvents) {
+                  const code = String(e.reminder_code ?? "") as ReminderCode;
+                  if (code === "R1" || code === "R2" || code === "R3" || code === "R4" || code === "R5") {
+                    if (!reminderByCode.has(code)) reminderByCode.set(code, e);
+                  }
+                }
+                const trackerLine = (["R1", "R2", "R3", "R4", "R5"] as const)
+                  .map((code) => `${reminderByCode.has(code) ? "✅" : "⬜"} ${reminderLabel(code)}`)
+                  .join(" • ");
                 return (
                   <>
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -289,35 +306,26 @@ export default function AdminOrdersPage() {
                     {o.created_at ? new Date(o.created_at).toLocaleString() : ""}
                   </p>
                   <div className="mt-3 rounded-2xl border border-white/10 bg-black/40 p-4">
-                    <p className="text-xs font-semibold text-white/70">Reminders</p>
-                    <p className="mt-1 text-sm font-semibold text-white">{remindersLine(remindersSent)}</p>
-                    {o.reminder_paused ? (
-                      <p className="mt-1 text-xs text-white/70">Paused by admin</p>
-                    ) : o.reminder_stopped ? (
-                      <p className="mt-1 text-xs text-white/70">Stopped</p>
-                    ) : currentStatus !== "order_received" ? (
-                      <p className="mt-1 text-xs text-white/70">Not applicable (paid/processed)</p>
-                    ) : nextDue ? (
-                      <p className="mt-1 text-xs text-white/70">
-                        Next: {nextDue}
-                        {minutesUntilNext !== null ? ` in ${formatMinutesAsCountdown(minutesUntilNext)}` : ""}
-                      </p>
+                    <p className="text-xs font-semibold text-white/70">Payment reminders</p>
+                    <p className="mt-1 text-sm font-semibold text-white">{trackerLine}</p>
+                    {eventsError ? <p className="mt-2 text-xs text-white/70">{eventsError}</p> : null}
+                    {eventsLoading ? <p className="mt-2 text-xs text-white/70">Loading reminder log…</p> : null}
+                    {reminderEvents.length ? (
+                      <div className="mt-3 space-y-2 text-xs text-white/70">
+                        {reminderEvents
+                          .slice()
+                          .sort((a, b) => String(a.sent_at ?? "").localeCompare(String(b.sent_at ?? "")))
+                          .map((e) => (
+                            <p key={e.id}>
+                              {reminderLabel(String(e.reminder_code ?? "") as ReminderCode)} sent {e.sent_at ? `on ${formatDateTime(e.sent_at)}` : ""}{" "}
+                              {e.sent_by_email ? `by ${e.sent_by_email}` : ""}
+                              {offerSummary(e.offer) ? ` • Offer: ${offerSummary(e.offer)}` : ""}
+                            </p>
+                          ))}
+                      </div>
                     ) : (
-                      <p className="mt-1 text-xs text-white/70">No more reminders scheduled</p>
+                      <p className="mt-2 text-xs text-white/70">No reminders sent yet.</p>
                     )}
-                    {o.reminder_offers &&
-                    (o.reminder_offers.free_delivery || o.reminder_offers.discount_code || o.reminder_offers.free_wig_cap) ? (
-                      <p className="mt-2 text-xs text-white/70">
-                        Offers:{" "}
-                        {[
-                          o.reminder_offers.free_delivery ? "Free delivery" : null,
-                          o.reminder_offers.discount_code ? `Discount ${o.reminder_offers.discount_code}` : null,
-                          o.reminder_offers.free_wig_cap ? "Free wig cap" : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" • ")}
-                      </p>
-                    ) : null}
                   </div>
                 </div>
 
@@ -383,100 +391,16 @@ export default function AdminOrdersPage() {
                       <button
                         type="button"
                         disabled={savingId === o.id}
-                        onClick={async () => {
-                          const nextAction = o.reminder_paused ? "resume" : "pause";
-                          const ok = window.confirm(
-                            `${o.reminder_paused ? "Resume" : "Pause"} reminders for this order?`,
-                          );
-                          if (!ok) return;
-                          setSavingId(o.id);
-                          try {
-                            const res = await fetch("/api/admin/order-reminders", {
-                              method: "POST",
-                              headers: { "content-type": "application/json" },
-                              body: JSON.stringify({ id: o.id, action: nextAction }),
-                            });
-                            const json = (await res.json()) as { ok?: boolean; error?: string };
-                            if (!res.ok || !json.ok) throw new Error(json.error || "Failed to update reminders.");
-                            await loadAll();
-                          } catch (err) {
-                            window.alert((err as Error).message || "Failed to update reminders.");
-                          } finally {
-                            setSavingId(null);
-                          }
+                        onClick={() => {
+                          setReminderModalOrderId(o.id);
+                          setSelectedReminder("");
+                          setPreview(null);
+                          setSendError(null);
                         }}
                         className="inline-flex items-center justify-center rounded-full border border-white/20 bg-black px-5 py-2 text-sm font-semibold text-white hover:border-brand/60 disabled:opacity-60"
                       >
-                        {o.reminder_paused ? "Resume reminders" : "Pause reminders"}
+                        Send Payment Reminder
                       </button>
-                      <button
-                        type="button"
-                        disabled={savingId === o.id}
-                        onClick={async () => {
-                          const ok = window.confirm(
-                            "Extend auto-cancel deadline by 24 hours? This helps if you’re chatting with the customer.",
-                          );
-                          if (!ok) return;
-                          setSavingId(o.id);
-                          try {
-                            const res = await fetch("/api/admin/order-reminders", {
-                              method: "POST",
-                              headers: { "content-type": "application/json" },
-                              body: JSON.stringify({ id: o.id, action: "extend_cancel_24h" }),
-                            });
-                            const json = (await res.json()) as { ok?: boolean; error?: string };
-                            if (!res.ok || !json.ok) throw new Error(json.error || "Failed to extend deadline.");
-                            await loadAll();
-                          } catch (err) {
-                            window.alert((err as Error).message || "Failed to extend deadline.");
-                          } finally {
-                            setSavingId(null);
-                          }
-                        }}
-                        className="inline-flex items-center justify-center rounded-full border border-white/20 bg-black px-5 py-2 text-sm font-semibold text-white hover:border-brand/60 disabled:opacity-60"
-                      >
-                        Extend 24h
-                      </button>
-                      <select
-                        disabled={savingId === o.id}
-                        defaultValue=""
-                        onChange={async (e) => {
-                          const code = e.target.value as ReminderCode | "";
-                          if (!code) return;
-                          e.currentTarget.value = "";
-                          const ok = window.confirm(`Send ${code} now? This will email the customer immediately.`);
-                          if (!ok) return;
-                          setSavingId(o.id);
-                          try {
-                            const res = await fetch("/api/admin/order-reminders", {
-                              method: "POST",
-                              headers: { "content-type": "application/json" },
-                              body: JSON.stringify({
-                                id: o.id,
-                                action: "trigger_reminder",
-                                reminder: code,
-                                discount_code: reminderSettings.discount_code,
-                              }),
-                            });
-                            const json = (await res.json()) as { ok?: boolean; error?: string };
-                            if (!res.ok || !json.ok) throw new Error(json.error || "Failed to send reminder.");
-                            await loadAll();
-                          } catch (err) {
-                            window.alert((err as Error).message || "Failed to send reminder.");
-                          } finally {
-                            setSavingId(null);
-                          }
-                        }}
-                        className="h-10 rounded-full border border-white/15 bg-black/40 px-4 text-sm font-semibold text-white outline-none focus:ring-2 focus:ring-brand/40 disabled:opacity-60"
-                        aria-label="Send reminder"
-                      >
-                        <option value="">Send reminder…</option>
-                        <option value="R1">Send R1</option>
-                        <option value="R2">Send R2</option>
-                        <option value="R3">Send R3</option>
-                        <option value="R4">Send R4</option>
-                        <option value="R5">Send R5</option>
-                      </select>
                     </>
                   ) : null}
                 </div>
@@ -512,6 +436,157 @@ export default function AdminOrdersPage() {
           ))
         )}
       </div>
+
+      {reminderModalOrderId ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-5xl rounded-3xl border border-white/10 bg-[#0b0b0e] p-6 text-white">
+            {(() => {
+              const order = orders.find((o) => o.id === reminderModalOrderId) ?? null;
+              return (
+                <>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-brand">Send Payment Reminder</p>
+                      <p className="truncate text-sm font-semibold text-white">
+                        {order?.customer_name ?? ""} • {order?.customer_email ?? ""}
+                      </p>
+                      <p className="truncate text-xs text-white/60">Order: {order?.id ?? ""}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReminderModalOrderId(null);
+                        setSelectedReminder("");
+                        setPreview(null);
+                        setSendError(null);
+                      }}
+                      className="rounded-full border border-white/15 bg-black px-4 py-2 text-xs font-semibold text-white hover:border-brand/60"
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                  <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <select
+                      value={selectedReminder}
+                      onChange={async (e) => {
+                        const next = e.target.value as ReminderCode | "";
+                        setSelectedReminder(next);
+                        setPreview(null);
+                        setSendError(null);
+                        if (!order || !next) return;
+                        setPreviewLoading(true);
+                        try {
+                          const res = await fetch("/api/admin/order-emails", {
+                            method: "POST",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({
+                              action: "preview",
+                              orderId: order.id,
+                              templateKey: reminderTemplateKey(next),
+                            }),
+                          });
+                          const json = (await res.json()) as {
+                            ok?: boolean;
+                            error?: string;
+                            alreadySent?: boolean;
+                            subject?: string;
+                            html?: string;
+                            existingEvent?: OrderEmailEventRow | null;
+                          };
+                          if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load preview.");
+                          setPreview({
+                            alreadySent: Boolean(json.alreadySent),
+                            subject: String(json.subject ?? ""),
+                            html: String(json.html ?? ""),
+                            existingEvent: (json.existingEvent ?? null) as OrderEmailEventRow | null,
+                          });
+                        } catch (err) {
+                          setSendError((err as Error).message || "Failed to load preview.");
+                        } finally {
+                          setPreviewLoading(false);
+                        }
+                      }}
+                      className="h-11 w-full rounded-2xl border border-white/15 bg-black/40 px-4 text-sm font-semibold text-white outline-none focus:ring-2 focus:ring-brand/40 sm:max-w-sm"
+                      aria-label="Reminder template"
+                    >
+                      <option value="">Select a reminder…</option>
+                      <option value="R1">Reminder 1 — Gentle Nudge</option>
+                      <option value="R2">Reminder 2 — Urgency</option>
+                      <option value="R3">Reminder 3 — Free Delivery Offer</option>
+                      <option value="R4">Reminder 4 — Discount</option>
+                      <option value="R5">Reminder 5 — Last Chance + Free Wig Cap</option>
+                    </select>
+
+                    <button
+                      type="button"
+                      disabled={!order || !selectedReminder || previewLoading || savingId === order?.id || preview?.alreadySent}
+                      onClick={async () => {
+                        if (!order || !selectedReminder) return;
+                        const ok = window.confirm("Send this reminder now? The email will be sent immediately.");
+                        if (!ok) return;
+                        setSavingId(order.id);
+                        setSendError(null);
+                        try {
+                          const res = await fetch("/api/admin/order-emails", {
+                            method: "POST",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({
+                              action: "send",
+                              orderId: order.id,
+                              templateKey: reminderTemplateKey(selectedReminder),
+                            }),
+                          });
+                          const json = (await res.json()) as { ok?: boolean; error?: string };
+                          if (!res.ok || !json.ok) throw new Error(json.error || "Failed to send reminder.");
+                          await loadEmailEvents(orders.map((o) => o.id));
+                          setReminderModalOrderId(null);
+                          setSelectedReminder("");
+                          setPreview(null);
+                        } catch (err) {
+                          setSendError((err as Error).message || "Failed to send reminder.");
+                        } finally {
+                          setSavingId(null);
+                        }
+                      }}
+                      className="inline-flex h-11 items-center justify-center rounded-2xl bg-brand px-5 text-sm font-semibold text-white transition hover:bg-[#C2177A] disabled:opacity-60"
+                    >
+                      Send
+                    </button>
+                  </div>
+
+                  {preview?.alreadySent ? (
+                    <p className="mt-3 text-sm text-white/70">
+                      This reminder was already sent{preview.existingEvent?.sent_at ? ` on ${formatDateTime(preview.existingEvent.sent_at)}` : ""}.
+                    </p>
+                  ) : null}
+                  {sendError ? <p className="mt-3 text-sm font-semibold text-brand">{sendError}</p> : null}
+
+                  <div className="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-white">
+                    {previewLoading ? (
+                      <div className="p-6">
+                        <p className="text-sm text-black/70">Loading preview…</p>
+                      </div>
+                    ) : preview?.html ? (
+                      <iframe title="Email preview" className="h-[70vh] w-full" srcDoc={preview.html} />
+                    ) : (
+                      <div className="p-6">
+                        <p className="text-sm text-black/70">Select a reminder to preview.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {preview?.subject ? (
+                    <p className="mt-3 text-xs text-white/60">
+                      Subject: <span className="font-semibold text-white/80">{preview.subject}</span>
+                    </p>
+                  ) : null}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -86,11 +86,6 @@ export async function POST(request: Request) {
     total_amount,
     status: "order_received",
     status_history: [{ from: null, to: "order_received", at: nowIso }],
-    reminders_sent: [],
-    reminder_stopped: false,
-    reminder_paused: false,
-    cancel_deadline_extended_hours: 0,
-    reminder_offers: {},
   };
 
   const firstInsert = await supabase.from("orders").insert(insertPayload).select("id").single();
@@ -100,20 +95,9 @@ export async function POST(request: Request) {
   if (orderError) {
     const msgLower = (orderError.message || "").toLowerCase();
     const missingStatusHistory = msgLower.includes("status_history") && msgLower.includes("does not exist");
-    const missingReminders =
-      (msgLower.includes("reminders_sent") && msgLower.includes("does not exist")) ||
-      (msgLower.includes("reminder_stopped") && msgLower.includes("does not exist")) ||
-      (msgLower.includes("reminder_paused") && msgLower.includes("does not exist")) ||
-      (msgLower.includes("cancel_deadline_extended_hours") && msgLower.includes("does not exist")) ||
-      (msgLower.includes("reminder_offers") && msgLower.includes("does not exist"));
 
-    if (missingStatusHistory || missingReminders) {
+    if (missingStatusHistory) {
       if (missingStatusHistory) delete insertPayload.status_history;
-      delete insertPayload.reminders_sent;
-      delete insertPayload.reminder_stopped;
-      delete insertPayload.reminder_paused;
-      delete insertPayload.cancel_deadline_extended_hours;
-      delete insertPayload.reminder_offers;
       const retry = await supabase.from("orders").insert(insertPayload).select("id").single();
       orderError = retry.error;
       orderData = (retry.data as { id: string } | null) ?? null;

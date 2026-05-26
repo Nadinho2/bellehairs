@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Resend } from "resend";
+import { createClient } from "@supabase/supabase-js";
 
 import { defaultDeliveryFeeConfig, getDeliveryQuote } from "@/lib/delivery";
 import type { OrderStatus } from "@/lib/supabase/types";
@@ -8,6 +9,55 @@ import type { OrderStatus } from "@/lib/supabase/types";
 const FROM = `"BelleHairs Owerri 💕" <hello@boomkas.com>`;
 const BRAND_PINK = "#E91E8C";
 const SITE_URL = "https://bellehairs.vercel.app";
+
+type DbEmailTemplate = {
+  key: string;
+  name: string;
+  subject: string;
+  body_html: string;
+  offer: Record<string, unknown> | null;
+};
+
+function sanitizeHtml(input: string) {
+  let html = String(input ?? "");
+  html = html.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "");
+  html = html.replace(/\son\w+="[^"]*"/gi, "");
+  html = html.replace(/\son\w+='[^']*'/gi, "");
+  return html;
+}
+
+function renderTemplateString(template: string, vars: Record<string, string>) {
+  const source = String(template ?? "");
+  return source.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, key: string) => {
+    const value = vars[key];
+    return typeof value === "string" ? value : "";
+  });
+}
+
+function createSupabaseServiceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) return null;
+  return createClient(url, serviceKey, { auth: { persistSession: false } });
+}
+
+async function tryLoadEmailTemplate(key: string): Promise<DbEmailTemplate | null> {
+  const supabase = createSupabaseServiceClient();
+  if (!supabase) return null;
+  const res = await supabase
+    .from("email_templates")
+    .select("key,name,subject,body_html,offer")
+    .eq("key", key)
+    .maybeSingle();
+  if (res.error) {
+    const msgLower = (res.error.message || "").toLowerCase();
+    if (msgLower.includes("does not exist") || msgLower.includes("schema cache")) return null;
+    return null;
+  }
+  const row = (res.data ?? null) as DbEmailTemplate | null;
+  if (!row?.key) return null;
+  return row;
+}
 
 function getResend() {
   const apiKey = process.env.RESEND_API_KEY;
@@ -104,6 +154,78 @@ function primaryButton(href: string, label: string) {
   </a>`;
 }
 
+function offerBoxHtml(offer: Record<string, unknown> | null) {
+  const o = offer && typeof offer === "object" ? offer : {};
+  const discountCode = typeof o.discount_code === "string" ? o.discount_code.trim() : "";
+  const discountPercent = Number(o.discount_percent ?? 0);
+  const freeDelivery = Boolean(o.free_delivery);
+  const freeWigCap = Boolean(o.free_wig_cap);
+
+  const lines: string[] = [];
+  if (freeDelivery) lines.push("Free delivery");
+  if (discountCode) lines.push(`Discount code: ${escapeHtml(discountCode)}`);
+  if (freeWigCap) lines.push("Free wig cap");
+
+  if (!lines.length && !(Number.isFinite(discountPercent) && discountPercent > 0)) return "";
+
+  if (discountCode && Number.isFinite(discountPercent) && discountPercent > 0) {
+    return `
+      <div style="background:#fff7fb;border:1px solid #ffd0e7;border-radius:14px;padding:14px;margin:12px 0 16px 0;">
+        <div style="font-size:12px;color:#555;font-weight:800;letter-spacing:0.08em;">DISCOUNT</div>
+        <div style="font-size:24px;color:${BRAND_PINK};font-weight:900;margin-top:6px;">${Math.round(discountPercent)}% OFF</div>
+        <div style="margin-top:8px;font-size:13px;color:#444;line-height:20px;">
+          Code: <strong>${escapeHtml(discountCode)}</strong>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div style="background:#fff7fb;border:1px solid #ffd0e7;border-radius:14px;padding:14px;margin:12px 0 16px 0;">
+      <div style="font-size:12px;color:#555;font-weight:800;letter-spacing:0.08em;">OFFER</div>
+      <div style="margin-top:8px;font-size:13px;color:#444;line-height:20px;">
+        ${escapeHtml(lines.join(" • ") || "")}
+      </div>
+    </div>
+  `;
+}
+
+function orderSummaryBoxHtml(params: {
+  items: OrderEmailItem[];
+  totalAmount: number;
+  deliveryFee: number;
+  showFreeDelivery?: boolean;
+}) {
+  const itemsHtml = orderItemsTable(params.items);
+  const showFree = Boolean(params.showFreeDelivery);
+  const totalShown = showFree ? Math.max(0, params.totalAmount - params.deliveryFee) : params.totalAmount;
+  const deliveryFeeCell = showFree
+    ? `<span style="text-decoration:line-through;color:#999;">${formatNaira(params.deliveryFee)}</span>
+       <span style="margin-left:8px;color:${BRAND_PINK};font-weight:900;">${formatNaira(0)} FREE</span>`
+    : `${formatNaira(params.deliveryFee)}`;
+
+  return `
+    <div style="border:1px solid #eee;border-radius:14px;padding:14px;">
+      <div style="font-weight:900;color:#111;font-size:14px;margin-bottom:10px;">Order Summary</div>
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
+        ${itemsHtml}
+        <tr>
+          <td style="padding:10px 0;color:#666;font-size:13px;">Delivery fee</td>
+          <td align="right" style="padding:10px 0;color:#111;font-weight:900;font-size:13px;">
+            ${deliveryFeeCell}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:12px 0;border-top:1px solid #eee;color:#111;font-weight:900;font-size:14px;">Total</td>
+          <td align="right" style="padding:12px 0;border-top:1px solid #eee;color:${BRAND_PINK};font-weight:900;font-size:16px;">
+            ${formatNaira(totalShown)}
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+}
+
 export async function sendEmail(params: { to: string; subject: string; html: string }) {
   const resend = getResend();
   const { error } = await resend.emails.send({
@@ -122,6 +244,43 @@ export type OrderEmailItem = {
 };
 
 export async function sendWelcomeEmail(params: { to: string; source: string }) {
+  const template = await tryLoadEmailTemplate("system_welcome");
+  if (template) {
+    const offer = template.offer && typeof template.offer === "object" ? template.offer : {};
+    const discountCode = typeof offer.discount_code === "string" ? offer.discount_code : "BELLE10";
+    const discountPercent = Number(offer.discount_percent ?? 10) || 10;
+    const vars: Record<string, string> = {
+      source: escapeHtml(params.source),
+      offer_discount_code: escapeHtml(discountCode),
+      offer_discount_percent: escapeHtml(String(Math.round(discountPercent))),
+      customer_name: "",
+      customer_first_name: "",
+      order_id: "",
+      order_summary: "",
+      payment_instructions: "",
+      delivery_eta_box: "",
+      offer_box: offerBoxHtml(offer),
+      cta_button: "",
+      cta_href: "",
+      cta_label: "",
+      headline: "",
+      message: "",
+    };
+    const subject = renderTemplateString(template.subject, vars);
+    const bodyHtml = sanitizeHtml(renderTemplateString(template.body_html, vars));
+    await sendEmail({
+      to: params.to,
+      subject,
+      html: wrapEmail({
+        title: subject,
+        preheader: "",
+        bodyHtml,
+        unsubscribeHref: unsubscribeUrl(params.to),
+      }),
+    });
+    return;
+  }
+
   const bodyHtml = `
     <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#111;">
       <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">Welcome to the BelleHairs VIP List 👑</h1>
@@ -225,6 +384,79 @@ export async function sendOrderStatusEmail(params: {
   state: string | null;
   cityOrLga: string | null;
 }) {
+  const templateKey =
+    params.status === "order_received"
+      ? "system_order_received"
+      : params.status === "payment_received"
+        ? "system_payment_confirmed"
+        : params.status === "order_confirmed"
+          ? "system_order_confirmed"
+          : params.status === "dispatched"
+            ? "system_dispatched"
+            : params.status === "delivered"
+              ? "system_delivered"
+              : "system_cancelled";
+
+  const template = await tryLoadEmailTemplate(templateKey);
+  if (template) {
+    const eta = estimateDeliveryLabel({
+      deliveryMethod: params.deliveryMethod,
+      state: params.state,
+      cityOrLga: params.cityOrLga,
+    });
+    const etaLine = eta ? eta : "We’ll confirm delivery time shortly";
+    const deliveryEtaBox =
+      params.status === "order_confirmed" || params.status === "dispatched"
+        ? `
+          <div style="margin-top:14px;background:#fff7fb;border:1px solid #ffd0e7;border-radius:14px;padding:14px;">
+            <div style="font-weight:900;color:#111;font-size:14px;">Estimated delivery time</div>
+            <div style="margin-top:6px;color:#444;font-size:14px;line-height:22px;">${escapeHtml(etaLine)}</div>
+          </div>
+        `
+        : "";
+
+    const paymentInstructions =
+      params.status === "order_received"
+        ? paymentInstructionsHtml()
+        : "";
+
+    const vars: Record<string, string> = {
+      customer_name: escapeHtml(params.customerName),
+      customer_first_name: escapeHtml(params.customerName.trim().split(/\s+/)[0] || params.customerName.trim() || "there"),
+      order_id: "",
+      order_summary: orderSummaryBoxHtml({
+        items: params.items,
+        totalAmount: params.totalAmount,
+        deliveryFee: params.deliveryFee,
+      }),
+      payment_instructions: paymentInstructions,
+      delivery_eta_box: deliveryEtaBox,
+      offer_box: offerBoxHtml(template.offer),
+      offer_discount_code: escapeHtml(String((template.offer as Record<string, unknown> | null)?.discount_code ?? "")),
+      offer_discount_percent: escapeHtml(String((template.offer as Record<string, unknown> | null)?.discount_percent ?? "")),
+      cta_button: "",
+      cta_href: "",
+      cta_label: "",
+      source: "",
+      headline: "",
+      message: "",
+    };
+
+    const subject = renderTemplateString(template.subject, vars);
+    const bodyHtml = sanitizeHtml(renderTemplateString(template.body_html, vars));
+    await sendEmail({
+      to: params.to,
+      subject,
+      html: wrapEmail({
+        title: subject,
+        preheader: `${statusLabel(params.status)} • BelleHairs Owerri`,
+        bodyHtml,
+        unsubscribeHref: unsubscribeUrl(params.to),
+      }),
+    });
+    return;
+  }
+
   const itemsHtml = orderItemsTable(params.items);
   const eta = estimateDeliveryLabel({
     deliveryMethod: params.deliveryMethod,
@@ -432,6 +664,89 @@ export async function sendPaymentReminderEmail(params: {
   deliveryFee: number;
   discountCode?: string;
 }) {
+  const templateKey =
+    params.reminder === "R1"
+      ? "payment_reminder_r1"
+      : params.reminder === "R2"
+        ? "payment_reminder_r2"
+        : params.reminder === "R3"
+          ? "payment_reminder_r3"
+          : params.reminder === "R4"
+            ? "payment_reminder_r4"
+            : "payment_reminder_r5";
+
+  const template = await tryLoadEmailTemplate(templateKey);
+  if (template) {
+    const offer = template.offer && typeof template.offer === "object" ? { ...template.offer } : {};
+    if (params.reminder === "R4") {
+      const code = (params.discountCode ?? "").trim();
+      if (code) offer.discount_code = code;
+    }
+
+    const greetingFirstName =
+      params.customerName.trim().split(/\s+/)[0] || params.customerName.trim() || "there";
+    const cta = (() => {
+      switch (params.reminder) {
+        case "R1":
+          return { label: "Complete My Order", message: "I want to complete my order." };
+        case "R2":
+          return { label: "Secure My Order Now", message: "I want to secure my order now." };
+        case "R3":
+          return { label: "Claim Free Delivery", message: "I want to claim the FREE delivery offer for my order." };
+        case "R4":
+          return {
+            label: "Use My Discount",
+            message: `I want to use the discount code ${String(offer.discount_code ?? "BELLE5").trim()} for my order.`,
+          };
+        case "R5":
+          return { label: "Claim My Free Wig Cap", message: "I want to claim the FREE wig cap offer for my order." };
+      }
+    })();
+
+    const ctaHref = storeWhatsAppHref({
+      customerName: params.customerName,
+      orderId: params.orderId,
+      message: cta.message,
+    });
+
+    const vars: Record<string, string> = {
+      customer_name: escapeHtml(params.customerName),
+      customer_first_name: escapeHtml(greetingFirstName),
+      order_id: escapeHtml(params.orderId),
+      order_summary: orderSummaryBoxHtml({
+        items: params.items,
+        totalAmount: params.totalAmount,
+        deliveryFee: params.deliveryFee,
+        showFreeDelivery: Boolean((offer as Record<string, unknown>).free_delivery),
+      }),
+      payment_instructions: paymentInstructionsHtml(),
+      offer_box: offerBoxHtml(offer),
+      offer_discount_code: escapeHtml(String((offer as Record<string, unknown>).discount_code ?? "")),
+      offer_discount_percent: escapeHtml(String((offer as Record<string, unknown>).discount_percent ?? "")),
+      cta_href: escapeHtml(ctaHref),
+      cta_label: escapeHtml(cta.label),
+      cta_button: primaryButton(ctaHref, cta.label),
+      delivery_eta_box: "",
+      source: "",
+      headline: "",
+      message: "",
+    };
+
+    const subject = renderTemplateString(template.subject, vars);
+    const bodyHtml = sanitizeHtml(renderTemplateString(template.body_html, vars));
+    await sendEmail({
+      to: params.to,
+      subject,
+      html: wrapEmail({
+        title: subject,
+        preheader: "Payment reminder • BelleHairs Owerri",
+        bodyHtml,
+        unsubscribeHref: unsubscribeUrl(params.to),
+      }),
+    });
+    return;
+  }
+
   const name = escapeHtml(params.customerName);
   const itemsHtml = orderItemsTable(params.items);
 
