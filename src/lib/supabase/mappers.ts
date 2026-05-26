@@ -22,7 +22,10 @@ export function mapProductRowToProduct(row: ProductRow): Product {
           const priceFromMap = lengthPrices?.[key] ?? null;
           return {
             lengthInches,
-            price: Number.isFinite(priceFromMap) && priceFromMap > 0 ? priceFromMap : Number(row.price),
+            price:
+              typeof priceFromMap === "number" && Number.isFinite(priceFromMap) && priceFromMap > 0
+                ? priceFromMap
+                : Number(row.price),
           };
         })
       : undefined;
