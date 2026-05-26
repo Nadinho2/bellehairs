@@ -110,7 +110,7 @@ async function runWithConcurrency<T>(
 
 export async function GET(request: NextRequest) {
   const secret = request.nextUrl.searchParams.get("secret") ?? "";
-  const expected = process.env.PAYMENT_REMINDERS_CRON_SECRET ?? process.env.EMAIL_CRON_SECRET ?? "";
+  const expected = process.env.PAYMENT_REMINDERS_CRON_SECRET ?? "";
   if (!expected || secret !== expected) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
