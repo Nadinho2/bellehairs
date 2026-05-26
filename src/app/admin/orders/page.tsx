@@ -5,9 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { formatPrice } from "@/lib/format";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { OrderRow } from "@/lib/supabase/types";
-
-type OrderStatus = OrderRow["status"];
+import type { OrderRow, OrderStatus, OrderStatusHistoryEntry } from "@/lib/supabase/types";
 
 function toWhatsAppNumber(input: string) {
   const digits = (input ?? "").replace(/\D/g, "");
@@ -16,6 +14,64 @@ function toWhatsAppNumber(input: string) {
   if (digits.startsWith("0") && digits.length === 11) return `234${digits.slice(1)}`;
   if (digits.length === 10) return `234${digits}`;
   return digits;
+}
+
+function statusLabel(status: OrderStatus) {
+  switch (status) {
+    case "order_received":
+      return "Order Received";
+    case "payment_received":
+      return "Payment Received";
+    case "order_confirmed":
+      return "Order Confirmed";
+    case "dispatched":
+      return "Dispatched";
+    case "delivered":
+      return "Delivered";
+    case "cancelled":
+      return "Cancelled";
+  }
+}
+
+function normalizeStatus(raw: string): OrderStatus {
+  if (raw === "pending") return "order_received";
+  if (raw === "confirmed") return "order_confirmed";
+  if (raw === "delivered") return "delivered";
+  if (
+    raw === "order_received" ||
+    raw === "payment_received" ||
+    raw === "order_confirmed" ||
+    raw === "dispatched" ||
+    raw === "cancelled"
+  ) {
+    return raw;
+  }
+  return "order_received";
+}
+
+function statusBadge(status: OrderStatus) {
+  switch (status) {
+    case "order_received":
+      return { label: "🟡 Order Received", className: "bg-yellow-500/20 text-yellow-200 border-yellow-500/30" };
+    case "payment_received":
+      return { label: "🔵 Payment Received", className: "bg-blue-500/20 text-blue-200 border-blue-500/30" };
+    case "order_confirmed":
+      return { label: "🟣 Order Confirmed", className: "bg-purple-500/20 text-purple-200 border-purple-500/30" };
+    case "dispatched":
+      return { label: "🟠 Dispatched", className: "bg-orange-500/20 text-orange-200 border-orange-500/30" };
+    case "delivered":
+      return { label: "🟢 Delivered", className: "bg-green-500/20 text-green-200 border-green-500/30" };
+    case "cancelled":
+      return { label: "🔴 Cancelled", className: "bg-red-500/20 text-red-200 border-red-500/30" };
+  }
+}
+
+function formatHistoryLine(e: OrderStatusHistoryEntry) {
+  const at = e.at ? new Date(e.at) : null;
+  const time = at ? at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+  const date = at ? at.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : "";
+  const fromLabel = e.from ? statusLabel(e.from) : "—";
+  return `${fromLabel} → ${statusLabel(e.to)}${time && date ? ` at ${time} on ${date}` : ""}`;
 }
 
 export default function AdminOrdersPage() {
@@ -93,10 +149,21 @@ export default function AdminOrdersPage() {
         ) : (
           orders.map((o) => (
             <div key={o.id} className="rounded-3xl border border-border bg-card p-6 text-white">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              {(() => {
+                const currentStatus = normalizeStatus(String(o.status));
+                return (
+                  <>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-brand">Order</p>
-                  <p className="mt-1 truncate text-sm font-semibold text-white">{o.id}</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <p className="truncate text-sm font-semibold text-white">{o.id}</p>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(currentStatus).className}`}
+                    >
+                      {statusBadge(currentStatus).label}
+                    </span>
+                  </div>
                   <p className="mt-2 text-sm text-white/70">
                     {o.customer_name} • {o.customer_phone} • {o.customer_email}
                   </p>
@@ -123,16 +190,35 @@ export default function AdminOrdersPage() {
 
                 <div className="flex flex-wrap items-center gap-3">
                   <select
-                    value={o.status}
+                    value={currentStatus}
                     onChange={async (e) => {
                       const next = e.target.value as OrderStatus;
+                      const ok = window.confirm(
+                        `Change status to ${statusLabel(next)}? This will send an email to the customer.`,
+                      );
+                      if (!ok) return;
                       setSavingId(o.id);
                       try {
-                        const { error: e2 } = await supabase
-                          .from("orders")
-                          .update({ status: next })
-                          .eq("id", o.id);
-                        if (e2) throw e2;
+                        const res = await fetch("/api/admin/orders", {
+                          method: "PATCH",
+                          headers: { "content-type": "application/json" },
+                          body: JSON.stringify({ id: o.id, status: next }),
+                        });
+                        const json = (await res.json()) as {
+                          ok?: boolean;
+                          error?: string;
+                          emailSent?: boolean;
+                          historyLogged?: boolean;
+                        };
+                        if (!res.ok || !json.ok) throw new Error(json.error || "Failed to update status.");
+                        if (json.emailSent === false) {
+                          window.alert("Status updated, but the email failed to send. Please try again.");
+                        }
+                        if (json.historyLogged === false) {
+                          window.alert(
+                            'Status updated, but history could not be saved. Add a "status_history" jsonb column to the orders table to enable history.',
+                          );
+                        }
                         await loadAll();
                       } catch (err) {
                         alert((err as Error).message || "Failed to update status.");
@@ -144,9 +230,12 @@ export default function AdminOrdersPage() {
                     className="h-10 rounded-full border border-white/15 bg-black/40 px-4 text-sm font-semibold text-white outline-none focus:ring-2 focus:ring-brand/40 disabled:opacity-60"
                     aria-label="Order status"
                   >
-                    <option value="pending">pending</option>
-                    <option value="confirmed">confirmed</option>
-                    <option value="delivered">delivered</option>
+                    <option value="order_received">🟡 Order Received</option>
+                    <option value="payment_received">🔵 Payment Received</option>
+                    <option value="order_confirmed">🟣 Order Confirmed</option>
+                    <option value="dispatched">🟠 Dispatched</option>
+                    <option value="delivered">🟢 Delivered</option>
+                    <option value="cancelled">🔴 Cancelled</option>
                   </select>
                   <a
                     href={`https://wa.me/${toWhatsAppNumber(o.customer_phone) ?? ""}`}
@@ -159,6 +248,21 @@ export default function AdminOrdersPage() {
                 </div>
               </div>
 
+              <details className="mt-4 rounded-2xl border border-white/10 bg-black/40 px-5 py-4">
+                <summary className="cursor-pointer text-sm font-semibold text-white">
+                  Status history
+                </summary>
+                {Array.isArray(o.status_history) && o.status_history.length ? (
+                  <div className="mt-4 space-y-2 text-sm text-white/70">
+                    {(o.status_history as OrderStatusHistoryEntry[]).map((h, idx) => (
+                      <p key={`${h.at}-${idx}`}>{formatHistoryLine(h)}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-white/70">No history logged yet.</p>
+                )}
+              </details>
+
               <details className="mt-5 rounded-2xl border border-white/10 bg-black/40 px-5 py-4">
                 <summary className="cursor-pointer text-sm font-semibold text-white">
                   View items JSON
@@ -167,6 +271,9 @@ export default function AdminOrdersPage() {
                   {JSON.stringify(o.items ?? null, null, 2)}
                 </pre>
               </details>
+                  </>
+                );
+              })()}
             </div>
           ))
         )}

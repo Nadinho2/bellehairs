@@ -16,10 +16,11 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "images.unsplash.com",
+        pathname: "/**",
       },
       ...(supabaseHostname
         ? [
-            { protocol: "https" as const, hostname: supabaseHostname },
+            { protocol: "https" as const, hostname: supabaseHostname, pathname: "/**" },
           ]
         : []),
     ],

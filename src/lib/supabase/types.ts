@@ -45,6 +45,12 @@ export type SocialFeedRow = {
   slot_number: number;
 };
 
+export type HomepageCategoryCardRow = {
+  category: DbProductCategory;
+  image_url: string;
+  updated_at?: string | null;
+};
+
 export type SubscriberRow = {
   id: string;
   email: string;
@@ -91,8 +97,23 @@ export type OrderRow = {
   order_note: string | null;
   items: unknown;
   total_amount: number | null;
-  status: "pending" | "confirmed" | "delivered";
+  status: OrderStatus;
+  status_history?: OrderStatusHistoryEntry[] | null;
   created_at: string;
+};
+
+export type OrderStatus =
+  | "order_received"
+  | "payment_received"
+  | "order_confirmed"
+  | "dispatched"
+  | "delivered"
+  | "cancelled";
+
+export type OrderStatusHistoryEntry = {
+  from: OrderStatus | null;
+  to: OrderStatus;
+  at: string;
 };
 
 export type OrderRowInsert = {
@@ -108,5 +129,5 @@ export type OrderRowInsert = {
   order_note?: string | null;
   items: unknown;
   total_amount: number;
-  status: "pending" | "confirmed" | "delivered";
+  status: OrderStatus;
 };

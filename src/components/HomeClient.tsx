@@ -10,6 +10,7 @@ import { hasSubscriberEmail } from "@/lib/emails";
 import { formatPrice } from "@/lib/format";
 import { useWishlist } from "@/lib/wishlist";
 import { useCartStore } from "@/store/cartStore";
+import type { DbProductCategory } from "@/lib/supabase/types";
 import type { Product } from "@/types/product";
 
 const SUBSCRIBED_COOKIE = "bh_email_subscribed";
@@ -142,14 +143,22 @@ function HomeProductCard(props: { product: Product }) {
   );
 }
 
-function CategoryCard(props: { title: string; href: string; image: string }) {
+function CategoryCard(props: { title: string; href: string; image?: string | null }) {
   return (
     <Link
       href={props.href}
       className="group relative overflow-hidden rounded-3xl border border-black/10 bg-black"
     >
       <div className="relative aspect-[4/3] w-full">
-        <Image src={props.image} alt={props.title} fill className="object-cover opacity-85" />
+        {props.image ? (
+          <Image src={props.image} alt={props.title} fill className="object-cover opacity-85" unoptimized />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-brand">
+            <p className="text-3xl leading-none text-white" style={{ fontFamily: "var(--font-logo)" }}>
+              BelleHairs
+            </p>
+          </div>
+        )}
         <div className="absolute inset-0 bg-black/45" />
         <div className="absolute inset-0 flex items-end p-6">
           <div className="space-y-1">
@@ -214,6 +223,7 @@ export default function HomeClient(props: {
   bestSellers: Product[];
   featured: Product[];
   socialImages: (string | null)[];
+  categoryCardImages?: Record<DbProductCategory, string | null>;
 }) {
   const [slide, setSlide] = useState(0);
   const [promoOpen, setPromoOpen] = useState(false);
@@ -370,17 +380,26 @@ export default function HomeClient(props: {
             <CategoryCard
               title="Wigs"
               href="/products?category=Wigs"
-              image="https://images.unsplash.com/photo-1541269620759-5c594a1c43c5?auto=format&fit=crop&w=1400&q=80"
+              image={
+                props.categoryCardImages?.Wigs ??
+                "https://images.unsplash.com/photo-1541269620759-5c594a1c43c5?auto=format&fit=crop&w=1400&q=80"
+              }
             />
             <CategoryCard
               title="Weavon"
               href="/products?category=Weavon"
-              image="https://images.unsplash.com/photo-1519699047748-de8e457a634e?auto=format&fit=crop&w=1400&q=80"
+              image={
+                props.categoryCardImages?.Weavon ??
+                "https://images.unsplash.com/photo-1519699047748-de8e457a634e?auto=format&fit=crop&w=1400&q=80"
+              }
             />
             <CategoryCard
               title="Accessories"
               href="/products?category=Accessories"
-              image="https://images.unsplash.com/photo-1612810436541-336d0cdbd3d6?auto=format&fit=crop&w=1400&q=80"
+              image={
+                props.categoryCardImages?.Accessories ??
+                "https://images.unsplash.com/photo-1612810436541-336d0cdbd3d6?auto=format&fit=crop&w=1400&q=80"
+              }
             />
           </div>
         </div>

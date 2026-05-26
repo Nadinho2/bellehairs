@@ -19,13 +19,10 @@ export function mapProductRowToProduct(row: ProductRow): Product {
     lengthNumbers.length > 0
       ? lengthNumbers.map((lengthInches) => {
           const key = `${lengthInches}"`;
-          const priceFromMap =
-            lengthPrices && typeof (lengthPrices as any)[key] !== "undefined"
-              ? Number((lengthPrices as any)[key])
-              : null;
+          const priceFromMap = lengthPrices?.[key] ?? null;
           return {
             lengthInches,
-            price: Number.isFinite(priceFromMap) && (priceFromMap as number) > 0 ? (priceFromMap as number) : Number(row.price),
+            price: Number.isFinite(priceFromMap) && priceFromMap > 0 ? priceFromMap : Number(row.price),
           };
         })
       : undefined;

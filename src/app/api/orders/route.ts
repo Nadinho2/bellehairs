@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-import { sendOrderConfirmationEmail } from "@/lib/email";
+import { sendOrderStatusEmail } from "@/lib/email";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function normalizeEmail(email: string) {
@@ -70,25 +70,37 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: subscriberError.message }, { status: 500 });
   }
 
-  const { data: orderData, error: orderError } = await supabase
-    .from("orders")
-    .insert({
-      customer_name,
-      customer_email,
-      customer_phone: String(body.customer_phone ?? ""),
-      customer_phone_2: body.customer_phone_2 ?? null,
-      delivery_address: body.delivery_address ?? null,
-      state: body.state ?? null,
-      city: body.city ?? null,
-      delivery_method,
-      delivery_fee,
-      order_note: body.order_note ?? null,
-      items: body.items ?? [],
-      total_amount,
-      status: body.status ?? "pending",
-    })
-    .select("id")
-    .single();
+  const nowIso = new Date().toISOString();
+  const insertPayload: Record<string, unknown> = {
+    customer_name,
+    customer_email,
+    customer_phone: String(body.customer_phone ?? ""),
+    customer_phone_2: body.customer_phone_2 ?? null,
+    delivery_address: body.delivery_address ?? null,
+    state: body.state ?? null,
+    city: body.city ?? null,
+    delivery_method,
+    delivery_fee,
+    order_note: body.order_note ?? null,
+    items: body.items ?? [],
+    total_amount,
+    status: "order_received",
+    status_history: [{ from: null, to: "order_received", at: nowIso }],
+  };
+
+  const firstInsert = await supabase.from("orders").insert(insertPayload).select("id").single();
+  let orderData = (firstInsert.data as { id: string } | null) ?? null;
+  let orderError = firstInsert.error;
+
+  if (orderError) {
+    const msgLower = (orderError.message || "").toLowerCase();
+    if (msgLower.includes("status_history") && msgLower.includes("does not exist")) {
+      delete insertPayload.status_history;
+      const retry = await supabase.from("orders").insert(insertPayload).select("id").single();
+      orderError = retry.error;
+      orderData = (retry.data as { id: string } | null) ?? null;
+    }
+  }
 
   if (orderError) {
     return NextResponse.json({ ok: false, error: orderError.message }, { status: 500 });
@@ -96,9 +108,10 @@ export async function POST(request: Request) {
 
   let emailSent = true;
   try {
-    await sendOrderConfirmationEmail({
+    await sendOrderStatusEmail({
       to: customer_email,
       customerName: customer_name,
+      status: "order_received",
       items: items.map((i) => ({
         name: String(i?.name ?? ""),
         quantity: Number(i?.quantity ?? 0),

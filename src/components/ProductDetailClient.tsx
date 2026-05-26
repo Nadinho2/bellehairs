@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import AddToCartButton from "@/components/AddToCartButton";
 import { formatPrice } from "@/lib/format";
@@ -25,11 +25,21 @@ export default function ProductDetailClient(props: {
   const [selectedLengthInches, setSelectedLengthInches] = useState<number | null>(
     variants?.[0]?.lengthInches ?? null,
   );
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   const selectedVariant = useMemo(() => {
     if (!variants || selectedLengthInches === null) return null;
     return variants.find((v) => v.lengthInches === selectedLengthInches) ?? null;
   }, [selectedLengthInches, variants]);
+
+  useEffect(() => {
+    if (!lightboxSrc) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxSrc(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [lightboxSrc]);
 
   const whatsappBaseUrl = "https://wa.me/2349126914795";
   const buildWhatsAppHref = (opts?: { lengthInches?: number; price?: number }) => {
@@ -65,7 +75,12 @@ export default function ProductDetailClient(props: {
     <div className="mx-auto w-full max-w-6xl px-4 py-10">
       <div className="grid gap-10 lg:grid-cols-2 lg:items-start">
         <div className="space-y-4">
-          <div className="relative aspect-[4/3] overflow-hidden rounded-3xl border border-border bg-card">
+          <button
+            type="button"
+            onClick={() => setLightboxSrc(product.image)}
+            className="relative aspect-[4/3] w-full overflow-hidden rounded-3xl border border-border bg-card text-left"
+            aria-label="View product image"
+          >
             <div className="absolute inset-0 bg-gradient-to-tr from-black/40 via-black/10 to-brand/20 opacity-60" />
             <Image
               src={product.image}
@@ -75,13 +90,16 @@ export default function ProductDetailClient(props: {
               priority
               unoptimized={product.image.startsWith("data:")}
             />
-          </div>
+          </button>
 
           <div className="grid grid-cols-3 gap-3">
             {images.slice(0, 3).map((src, idx) => (
-              <div
+              <button
+                type="button"
                 key={`${src}-${idx}`}
-                className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-border bg-card"
+                onClick={() => setLightboxSrc(src)}
+                className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-border bg-card text-left"
+                aria-label={`View product image ${idx + 1}`}
               >
                 <Image
                   src={src}
@@ -90,7 +108,7 @@ export default function ProductDetailClient(props: {
                   className="object-cover opacity-90"
                   unoptimized={src.startsWith("data:")}
                 />
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -230,6 +248,34 @@ export default function ProductDetailClient(props: {
                 </div>
               );
             })}
+          </div>
+        </div>
+      ) : null}
+
+      {lightboxSrc ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightboxSrc(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="relative w-full max-w-4xl overflow-hidden rounded-3xl border border-white/10 bg-black"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative aspect-[4/3] w-full">
+              <Image src={lightboxSrc} alt={product.name} fill className="object-contain" unoptimized />
+            </div>
+            <div className="flex items-center justify-between gap-4 border-t border-white/10 bg-black/60 px-4 py-3">
+              <p className="truncate text-sm font-semibold text-white">{product.name}</p>
+              <button
+                type="button"
+                onClick={() => setLightboxSrc(null)}
+                className="rounded-full border border-white/20 bg-black px-4 py-2 text-sm font-semibold text-white hover:border-brand/60"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

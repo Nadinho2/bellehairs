@@ -3,6 +3,7 @@ import "server-only";
 import { Resend } from "resend";
 
 import { defaultDeliveryFeeConfig, getDeliveryQuote } from "@/lib/delivery";
+import type { OrderStatus } from "@/lib/supabase/types";
 
 const FROM = `"BelleHairs Owerri 💕" <hello@boomkas.com>`;
 const BRAND_PINK = "#E91E8C";
@@ -156,23 +157,31 @@ export async function sendWelcomeEmail(params: { to: string; source: string }) {
   });
 }
 
-export async function sendOrderConfirmationEmail(params: {
-  to: string;
-  customerName: string;
-  items: OrderEmailItem[];
-  totalAmount: number;
-  deliveryFee: number;
-  deliveryMethod: string;
-  state: string | null;
-  cityOrLga: string | null;
-}) {
-  const itemsHtml = params.items
+function statusLabel(status: OrderStatus) {
+  switch (status) {
+    case "order_received":
+      return "Order Received";
+    case "payment_received":
+      return "Payment Received";
+    case "order_confirmed":
+      return "Order Confirmed";
+    case "dispatched":
+      return "Dispatched";
+    case "delivered":
+      return "Delivered";
+    case "cancelled":
+      return "Cancelled";
+  }
+}
+
+function orderItemsTable(items: OrderEmailItem[]) {
+  return items
     .map((i) => {
       const lineTotal = (Number(i.unit_price) || 0) * (Number(i.quantity) || 0);
       return `<tr>
         <td style="padding:10px 0;border-bottom:1px solid #eee;">
           <div style="font-weight:800;color:#111;font-size:14px;">${escapeHtml(i.name)}</div>
-          <div style="color:#666;font-size:12px;margin-top:2px;">Qty ${i.quantity} • ${formatNaira(i.unit_price)} each</div>
+          <div style="color:#666;font-size:12px;margin-top:2px;">Qty ${Number(i.quantity) || 0} • ${formatNaira(Number(i.unit_price) || 0)} each</div>
         </td>
         <td align="right" style="padding:10px 0;border-bottom:1px solid #eee;font-weight:900;color:#111;font-size:14px;">
           ${formatNaira(lineTotal)}
@@ -180,7 +189,13 @@ export async function sendOrderConfirmationEmail(params: {
       </tr>`;
     })
     .join("");
+}
 
+function estimateDeliveryLabel(params: {
+  deliveryMethod: string;
+  state: string | null;
+  cityOrLga: string | null;
+}) {
   const state = params.state ?? "";
   const cityOrLga = params.cityOrLga ?? "";
   const quote =
@@ -194,19 +209,150 @@ export async function sendOrderConfirmationEmail(params: {
         })
       : null;
 
-  const eta =
-    quote?.kind === "pickup"
-      ? quote.label
-      : quote?.kind === "delivery"
-        ? quote.durationLabel
-        : "We’ll confirm delivery time shortly";
+  if (quote?.kind === "pickup") return quote.label;
+  if (quote?.kind === "delivery") return quote.durationLabel;
+  return null;
+}
+
+export async function sendOrderStatusEmail(params: {
+  to: string;
+  customerName: string;
+  status: OrderStatus;
+  items: OrderEmailItem[];
+  totalAmount: number;
+  deliveryFee: number;
+  deliveryMethod: string;
+  state: string | null;
+  cityOrLga: string | null;
+}) {
+  const itemsHtml = orderItemsTable(params.items);
+  const eta = estimateDeliveryLabel({
+    deliveryMethod: params.deliveryMethod,
+    state: params.state,
+    cityOrLga: params.cityOrLga,
+  });
+  const etaLine = eta ? eta : "We’ll confirm delivery time shortly";
+
+  const subject = (() => {
+    switch (params.status) {
+      case "order_received":
+        return "📦 We've Received Your Order — BelleHairs Owerri";
+      case "payment_received":
+        return "✅ Payment Confirmed — Your Order is Being Processed!";
+      case "order_confirmed":
+        return "🎀 Your BelleHairs Order is Confirmed!";
+      case "dispatched":
+        return "🚚 Your Order is On Its Way — BelleHairs Owerri";
+      case "delivered":
+        return "💕 Your BelleHairs Order Has Been Delivered!";
+      case "cancelled":
+        return "❌ Your BelleHairs Order Has Been Cancelled";
+    }
+  })();
+
+  const introHtml = (() => {
+    const name = escapeHtml(params.customerName);
+    switch (params.status) {
+      case "order_received":
+        return `
+          <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">📦 We&apos;ve Received Your Order</h1>
+          <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
+            Hi <strong>${name}</strong>, thank you for your order! We have received it and are waiting for your payment.
+          </p>
+        `;
+      case "payment_received":
+        return `
+          <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">✅ Payment Confirmed</h1>
+          <p style="margin:0 0 10px 0;color:#444;line-height:22px;font-size:14px;">
+            Hi <strong>${name}</strong>, we have confirmed your payment! 🎉
+          </p>
+          <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
+            Your order is now being prepared and will be dispatched soon. We will notify you once your order is on its way!
+          </p>
+        `;
+      case "order_confirmed":
+        return `
+          <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">🎀 Order Confirmed</h1>
+          <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
+            Hi <strong>${name}</strong>, your order has been confirmed and is being carefully packed for you 💕
+          </p>
+        `;
+      case "dispatched":
+        return `
+          <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">🚚 Your Order is On Its Way</h1>
+          <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
+            Hi <strong>${name}</strong>, great news! Your hair is on its way to you 🎉
+          </p>
+        `;
+      case "delivered":
+        return `
+          <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">💕 Delivered</h1>
+          <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
+            Hi <strong>${name}</strong>, your order has been delivered! We hope you absolutely love your new hair 👑
+          </p>
+        `;
+      case "cancelled":
+        return `
+          <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">❌ Order Cancelled</h1>
+          <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
+            Hi <strong>${name}</strong>, your order has been cancelled.
+          </p>
+        `;
+    }
+  })();
+
+  const extraHtml = (() => {
+    switch (params.status) {
+      case "order_received":
+        return `
+          <div style="margin-top:14px;background:#fff7fb;border:1px solid #ffd0e7;border-radius:14px;padding:14px;">
+            <div style="font-weight:900;color:#111;font-size:14px;">Payment instructions</div>
+            <div style="margin-top:6px;color:#444;font-size:14px;line-height:22px;">
+              Please make payment via bank transfer and send your proof of payment to <strong>0912 691 4795</strong> on WhatsApp to confirm your order.
+              Your order will be processed once payment is confirmed by our team.
+            </div>
+          </div>
+        `;
+      case "payment_received":
+        return "";
+      case "order_confirmed":
+        return `
+          <div style="margin-top:14px;background:#fff7fb;border:1px solid #ffd0e7;border-radius:14px;padding:14px;">
+            <div style="font-weight:900;color:#111;font-size:14px;">Estimated delivery time</div>
+            <div style="margin-top:6px;color:#444;font-size:14px;line-height:22px;">${escapeHtml(etaLine)}</div>
+          </div>
+        `;
+      case "dispatched":
+        return `
+          <div style="margin-top:14px;background:#fff7fb;border:1px solid #ffd0e7;border-radius:14px;padding:14px;">
+            <div style="font-weight:900;color:#111;font-size:14px;">Estimated delivery time</div>
+            <div style="margin-top:6px;color:#444;font-size:14px;line-height:22px;">${escapeHtml(etaLine)}</div>
+          </div>
+          <p style="margin:14px 0 0 0;color:#444;line-height:22px;font-size:14px;">
+            If you have any questions, WhatsApp us: <strong>0912 691 4795</strong>
+          </p>
+        `;
+      case "delivered":
+        return `
+          <p style="margin:0 0 10px 0;color:#444;line-height:22px;font-size:14px;">
+            We&apos;d love to hear from you — reply to this email or WhatsApp us with your feedback!
+          </p>
+          <p style="margin:0;color:#444;line-height:22px;font-size:14px;">
+            Tag us on TikTok <strong>@bellehairsng</strong> so we can feature you! 💕
+          </p>
+        `;
+      case "cancelled":
+        return `
+          <p style="margin:0;color:#444;line-height:22px;font-size:14px;">
+            If this was a mistake or you have questions, please contact us immediately on WhatsApp: <strong>0912 691 4795</strong>
+          </p>
+        `;
+    }
+  })();
 
   const bodyHtml = `
     <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#111;">
-      <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">✅ Order Confirmed</h1>
-      <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
-        Hi <strong>${escapeHtml(params.customerName)}</strong>, your order has been received.
-      </p>
+      ${introHtml}
 
       <div style="border:1px solid #eee;border-radius:14px;padding:14px;">
         <div style="font-weight:900;color:#111;font-size:14px;margin-bottom:10px;">Order Summary</div>
@@ -227,26 +373,30 @@ export async function sendOrderConfirmationEmail(params: {
         </table>
       </div>
 
-      <div style="margin-top:14px;background:#fff7fb;border:1px solid #ffd0e7;border-radius:14px;padding:14px;">
-        <div style="font-weight:900;color:#111;font-size:14px;">Estimated delivery time</div>
-        <div style="margin-top:6px;color:#444;font-size:14px;line-height:22px;">${escapeHtml(eta)}</div>
+      <div style="margin-top:14px;background:#f7f7fb;border:1px solid #e7e7ff;border-radius:14px;padding:14px;">
+        <div style="font-weight:900;color:#111;font-size:14px;">Current status</div>
+        <div style="margin-top:6px;color:#444;font-size:14px;line-height:22px;">${escapeHtml(
+          statusLabel(params.status),
+        )}</div>
       </div>
+
+      ${extraHtml}
 
       <p style="margin:14px 0 0 0;color:#444;line-height:22px;font-size:14px;">
         Need help? Call/WhatsApp: <strong>0912 691 4795</strong>
       </p>
       <p style="margin:12px 0 0 0;color:#444;line-height:22px;font-size:14px;">
-        Thank you for choosing BelleHairs 💕 We&apos;ll be in touch shortly!
+        Thank you for choosing BelleHairs Owerri — A Home of Wigs and Hairs.
       </p>
     </div>
   `;
 
   await sendEmail({
     to: params.to,
-    subject: "✅ Order Confirmed — BelleHairs Owerri",
+    subject,
     html: wrapEmail({
-      title: "Order Confirmed — BelleHairs Owerri",
-      preheader: "We’ve received your order. We’ll confirm availability shortly.",
+      title: subject,
+      preheader: `${statusLabel(params.status)} • BelleHairs Owerri`,
       bodyHtml,
       unsubscribeHref: unsubscribeUrl(params.to),
     }),

@@ -6,7 +6,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { DbHairType, DbProductCategory, DbTexture, ProductRow, SocialFeedRow } from "@/lib/supabase/types";
+import type {
+  DbHairType,
+  DbProductCategory,
+  DbTexture,
+  HomepageCategoryCardRow,
+  ProductRow,
+  SocialFeedRow,
+} from "@/lib/supabase/types";
 
 const LENGTH_OPTIONS = [10, 12, 14, 16, 18, 20, 22, 24, 26] as const;
 const CATEGORY_OPTIONS: DbProductCategory[] = ["Wigs", "Weavon", "Accessories"];
@@ -32,7 +39,15 @@ async function uploadPublicImage(params: {
     contentType: params.file.type,
     cacheControl: "3600",
   });
-  if (error) throw error;
+  if (error) {
+    const msg = error.message || "";
+    if (msg.toLowerCase().includes("bucket not found")) {
+      throw new Error(
+        `Storage bucket "${params.bucket}" not found. Create a PUBLIC Supabase Storage bucket named "${params.bucket}" then try again.`,
+      );
+    }
+    throw error;
+  }
   const { data } = supabase.storage.from(params.bucket).getPublicUrl(params.path);
   return data.publicUrl;
 }
@@ -41,8 +56,30 @@ export default function AdminPage() {
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
 
+  // #region debug-point admin-product-save-client-logger
+  const debugReport = useCallback(async (event: string, data?: Record<string, unknown>) => {
+    try {
+      await fetch("http://127.0.0.1:7777/event", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          ts: Date.now(),
+          sessionId: "admin-product-save",
+          runId: "pre",
+          hypothesisId: "H*",
+          source: "admin-page",
+          event,
+          data,
+        }),
+      });
+    } catch {}
+  }, []);
+  // #endregion debug-point admin-product-save-client-logger
+
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [social, setSocial] = useState<SocialFeedRow[]>([]);
+  const [categoryCards, setCategoryCards] = useState<HomepageCategoryCardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,25 +110,59 @@ export default function AdminPage() {
     return map;
   }, [social]);
 
+  const categoryCardByCategory = useMemo(() => {
+    const map = new Map<DbProductCategory, HomepageCategoryCardRow>();
+    for (const row of categoryCards) map.set(row.category, row);
+    return map;
+  }, [categoryCards]);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [productsRes, { data: socialData, error: socialError }] = await Promise.all([
+      const [productsRes, socialRes, categoryRes] = await Promise.all([
         fetch("/api/admin/products", { method: "GET" }),
         supabase.from("social_feed").select("*").order("slot_number", { ascending: true }),
+        supabase.from("homepage_category_cards").select("*"),
       ]);
-      if (socialError) throw socialError;
+
+      const socialData = (socialRes as { data: SocialFeedRow[] | null; error: { message: string } | null }).data;
+      const socialError = (socialRes as { data: SocialFeedRow[] | null; error: { message: string } | null }).error;
+      if (socialError) {
+        setError(socialError.message || "Failed to load social feed.");
+      } else {
+        setSocial((socialData ?? []) as SocialFeedRow[]);
+      }
+
+      const categoryData = (
+        categoryRes as { data: HomepageCategoryCardRow[] | null; error: { message: string } | null }
+      ).data;
+      const categoryError = (
+        categoryRes as { data: HomepageCategoryCardRow[] | null; error: { message: string } | null }
+      ).error;
+      if (categoryError) {
+        const msg = categoryError.message || "";
+        if (msg.toLowerCase().includes("does not exist")) {
+          setError(
+            'Homepage category images table is missing in Supabase. Create "homepage_category_cards" with columns: category (text, unique) and image_url (text).',
+          );
+        } else {
+          setError(msg || "Failed to load homepage category images.");
+        }
+      } else {
+        setCategoryCards((categoryData ?? []) as HomepageCategoryCardRow[]);
+      }
+
       const productsJson = (await productsRes.json()) as {
         ok?: boolean;
         rows?: ProductRow[];
         error?: string;
       };
       if (!productsRes.ok || !productsJson.ok) {
-        throw new Error(productsJson.error || "Failed to load products.");
+        setError(productsJson.error || "Failed to load products.");
+      } else {
+        setProducts((productsJson.rows ?? []) as ProductRow[]);
       }
-      setProducts((productsJson.rows ?? []) as ProductRow[]);
-      setSocial((socialData ?? []) as SocialFeedRow[]);
     } catch (e) {
       setError((e as Error).message || "Failed to load admin data.");
     } finally {
@@ -105,6 +176,19 @@ export default function AdminPage() {
     }, 0);
     return () => window.clearTimeout(t);
   }, [loadAll]);
+
+  // #region debug-point admin-product-save-state-snapshot
+  useEffect(() => {
+    void debugReport("state-changed", {
+      saving,
+      uploadingImages,
+      imagesCount: images.length,
+      lengthsCount: lengths.length,
+      price,
+      editingId,
+    });
+  }, [debugReport, saving, uploadingImages, images.length, lengths.length, price, editingId]);
+  // #endregion debug-point admin-product-save-state-snapshot
 
   const resetForm = () => {
     setEditingId(null);
@@ -138,7 +222,7 @@ export default function AdminPage() {
         .filter((n) => Number.isFinite(n) && n > 0),
     );
     const byLength: Record<number, string> = {};
-    const lengthPricesRaw = (p as any)?.length_prices as Record<string, unknown> | null | undefined;
+    const lengthPricesRaw = p.length_prices ?? null;
     if (lengthPricesRaw && typeof lengthPricesRaw === "object") {
       for (const [k, v] of Object.entries(lengthPricesRaw)) {
         const n = Number(String(k).replace(/[^\d]/g, ""));
@@ -161,6 +245,7 @@ export default function AdminPage() {
     setUploadingImages(false);
     setDescription(p.description ?? "");
     setFormError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const onLogout = async () => {
@@ -262,6 +347,17 @@ export default function AdminPage() {
               setFormError(null);
               setSaving(true);
               try {
+                // #region debug-point admin-product-save-submit-start
+                void debugReport("submit-start", {
+                  name,
+                  category,
+                  price,
+                  uploadingImages,
+                  imagesCount: images.length,
+                  lengths,
+                  lengthPrices,
+                });
+                // #endregion debug-point admin-product-save-submit-start
                 const trimmedName = name.trim();
                 if (!trimmedName) throw new Error("Product name is required.");
                 const parsedPrice = Number(price);
@@ -307,19 +403,31 @@ export default function AdminPage() {
                   payload.length_prices = lengthPriceMap;
                 }
 
+                // #region debug-point admin-product-save-api-request
+                void debugReport("api-request", { payloadKeys: Object.keys(payload), imagesCount: images.length });
+                // #endregion debug-point admin-product-save-api-request
                 const res = await fetch("/api/admin/products", {
                   method: "POST",
                   headers: { "content-type": "application/json" },
                   body: JSON.stringify(payload),
                 });
                 const json = (await res.json()) as { ok?: boolean; error?: string };
+                // #region debug-point admin-product-save-api-response
+                void debugReport("api-response", { status: res.status, ok: json.ok, error: json.error });
+                // #endregion debug-point admin-product-save-api-response
                 if (!res.ok || !json.ok) throw new Error(json.error || "Failed to save product.");
                 if (!editingId) setEditingId(id);
                 await loadAll();
               } catch (e2) {
                 setFormError((e2 as Error).message || "Failed to save product.");
+                // #region debug-point admin-product-save-submit-error
+                void debugReport("submit-error", { message: (e2 as Error)?.message });
+                // #endregion debug-point admin-product-save-submit-error
               } finally {
                 setSaving(false);
+                // #region debug-point admin-product-save-submit-finish
+                void debugReport("submit-finish", {});
+                // #endregion debug-point admin-product-save-submit-finish
               }
             }}
           >
@@ -468,6 +576,12 @@ export default function AdminPage() {
                   const id = editingId ?? crypto.randomUUID();
                   if (!editingId) setEditingId(id);
                   setUploadingImages(true);
+                  // #region debug-point admin-product-save-upload-start
+                  void debugReport("upload-start", {
+                    files: files.map((f) => ({ name: f.name, size: f.size, type: f.type })),
+                    editingId: id,
+                  });
+                  // #endregion debug-point admin-product-save-upload-start
                   try {
                     const urls: string[] = [];
                     for (const file of files) {
@@ -482,10 +596,19 @@ export default function AdminPage() {
                     }
                     setImages((prev) => [...prev, ...urls]);
                     e.target.value = "";
+                    // #region debug-point admin-product-save-upload-success
+                    void debugReport("upload-success", { urlsCount: urls.length, urls });
+                    // #endregion debug-point admin-product-save-upload-success
                   } catch (err) {
                     setFormError((err as Error).message || "Failed to upload image.");
+                    // #region debug-point admin-product-save-upload-error
+                    void debugReport("upload-error", { message: (err as Error)?.message });
+                    // #endregion debug-point admin-product-save-upload-error
                   } finally {
                     setUploadingImages(false);
+                    // #region debug-point admin-product-save-upload-finish
+                    void debugReport("upload-finish", { imagesCountAfter: images.length });
+                    // #endregion debug-point admin-product-save-upload-finish
                   }
                 }}
                 className="block w-full text-sm text-white/80 file:mr-4 file:rounded-full file:border-0 file:bg-brand file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-[#C2177A]"
@@ -535,7 +658,18 @@ export default function AdminPage() {
 
           <div className="grid gap-4">
             {products.map((p) => (
-              <div key={p.id} className="rounded-3xl border border-border bg-card p-5 text-white">
+              <div
+                key={p.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => startEdit(p)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" && e.key !== " ") return;
+                  e.preventDefault();
+                  startEdit(p);
+                }}
+                className="cursor-pointer rounded-3xl border border-border bg-card p-5 text-white transition hover:border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand/30"
+              >
                 <div className="flex items-start gap-4">
                   <div className="relative h-16 w-16 overflow-hidden rounded-2xl border border-white/15 bg-black/40">
                     {p.images?.[0] ? (
@@ -565,14 +699,18 @@ export default function AdminPage() {
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => startEdit(p)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startEdit(p);
+                    }}
                     className="inline-flex items-center justify-center rounded-full bg-brand px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
                   >
                     Edit
                   </button>
                   <button
                     type="button"
-                    onClick={async () => {
+                    onClick={async (e) => {
+                      e.stopPropagation();
                       const ok = window.confirm(`Delete "${p.name}"?`);
                       if (!ok) return;
                       const res = await fetch("/api/admin/products", {
@@ -596,6 +734,110 @@ export default function AdminPage() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="mt-10 rounded-3xl border border-border bg-card p-6 text-white">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-white">Homepage Category Images</p>
+            <p className="mt-1 text-sm text-white/70">
+              These images show in the “Shop by Category” section on the homepage.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              const ok = window.confirm("Clear all homepage category images?");
+              if (!ok) return;
+              setError(null);
+              try {
+                const { error } = await supabase
+                  .from("homepage_category_cards")
+                  .delete()
+                  .neq("category", "");
+                if (error) throw new Error(error.message);
+                await loadAll();
+              } catch (err) {
+                setError((err as Error).message || "Failed to clear category images.");
+              }
+            }}
+            className="inline-flex items-center justify-center rounded-full border border-white/20 bg-black px-5 py-2 text-sm font-semibold text-white hover:border-brand/60"
+          >
+            Clear all
+          </button>
+        </div>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {CATEGORY_OPTIONS.map((cat) => {
+            const row = categoryCardByCategory.get(cat) ?? null;
+            const src = row?.image_url ?? null;
+            return (
+              <div key={cat} className="overflow-hidden rounded-3xl border border-white/15 bg-black/40">
+                <div className="relative aspect-[4/3] w-full">
+                  {src ? (
+                    <Image src={src} alt={`${cat} category image`} fill className="object-cover" unoptimized />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-brand">
+                      <p className="text-3xl leading-none text-white" style={{ fontFamily: "var(--font-logo)" }}>
+                        {cat}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 p-4">
+                  <label className="inline-flex cursor-pointer items-center justify-center rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#C2177A]">
+                    Upload
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        setError(null);
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const safeName = file.name.replaceAll(" ", "-");
+                          const path = `category-cards/${cat}/${Date.now()}-${safeName}`;
+                          const url = await uploadPublicImage({
+                            bucket: "banner-images",
+                            path,
+                            file,
+                          });
+                          const { error } = await supabase.from("homepage_category_cards").upsert(
+                            { category: cat, image_url: url },
+                            { onConflict: "category" },
+                          );
+                          if (error) throw new Error(error.message);
+                          await loadAll();
+                          e.target.value = "";
+                        } catch (err) {
+                          setError((err as Error).message || "Failed to upload category image.");
+                        }
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={!src}
+                    onClick={async () => {
+                      setError(null);
+                      try {
+                        const { error } = await supabase.from("homepage_category_cards").delete().eq("category", cat);
+                        if (error) throw new Error(error.message);
+                        await loadAll();
+                      } catch (err) {
+                        setError((err as Error).message || "Failed to remove category image.");
+                      }
+                    }}
+                    className="inline-flex items-center justify-center rounded-full border border-white/20 bg-black px-4 py-2 text-sm font-semibold text-white hover:border-brand/60 disabled:opacity-60"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

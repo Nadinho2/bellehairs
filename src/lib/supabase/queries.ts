@@ -1,7 +1,13 @@
 import "server-only";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { BannerSlideRow, ProductRow, ReviewRow, SocialFeedRow } from "@/lib/supabase/types";
+import type {
+  BannerSlideRow,
+  HomepageCategoryCardRow,
+  ProductRow,
+  ReviewRow,
+  SocialFeedRow,
+} from "@/lib/supabase/types";
 
 export async function fetchActiveBannerSlides(): Promise<BannerSlideRow[]> {
   const supabase = await createSupabaseServerClient();
@@ -42,6 +48,13 @@ export async function fetchSocialFeed(): Promise<SocialFeedRow[]> {
     .order("slot_number", { ascending: true });
   if (error) throw new Error(error.message);
   return (data ?? []) as SocialFeedRow[];
+}
+
+export async function fetchHomepageCategoryCards(): Promise<HomepageCategoryCardRow[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from("homepage_category_cards").select("*");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as HomepageCategoryCardRow[];
 }
 
 export async function fetchAllProducts(): Promise<ProductRow[]> {

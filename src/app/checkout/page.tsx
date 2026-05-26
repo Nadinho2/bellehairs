@@ -271,7 +271,7 @@ export default function CheckoutPage() {
                 order_note: orderNote.trim() || null,
                 items: orderItems,
                 total_amount: grandTotal,
-                status: "pending",
+                status: "order_received",
               };
 
               const res = await fetch("/api/orders", {
@@ -369,13 +369,6 @@ export default function CheckoutPage() {
                       {deliveryQuote.durationLabel}
                     </p>
                   )}
-                  <p className="mt-2 text-xs text-white/60">
-                    Manage delivery fees in{" "}
-                    <Link href="/admin/delivery" className="text-brand hover:underline">
-                      Admin → Delivery
-                    </Link>
-                    .
-                  </p>
                 </div>
 
                 <Field
