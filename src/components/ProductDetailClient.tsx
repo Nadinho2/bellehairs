@@ -2,11 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import AddToCartButton from "@/components/AddToCartButton";
 import { formatPrice } from "@/lib/format";
 import type { ReviewRow } from "@/lib/supabase/types";
+import { useCartStore } from "@/store/cartStore";
 import type { Product } from "@/types/product";
 
 export default function ProductDetailClient(props: {
@@ -15,6 +17,9 @@ export default function ProductDetailClient(props: {
 }) {
   const product = props.product;
   const reviews = props.reviews ?? [];
+  const router = useRouter();
+  const addItem = useCartStore((s) => s.addItem);
+  const cartItems = useCartStore((s) => s.items);
 
   const images = useMemo(() => {
     if (!product) return [];
@@ -51,17 +56,6 @@ export default function ProductDetailClient(props: {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [lightboxSrc]);
-
-  const whatsappBaseUrl = "https://wa.me/2349126914795";
-  const buildWhatsAppHref = (opts?: { lengthInches?: number; price?: number }) => {
-    const lengthLine =
-      typeof opts?.lengthInches === "number" ? `Length: ${opts.lengthInches} in\n` : "";
-    const priceLine =
-      typeof opts?.price === "number" ? `Price: ${formatPrice(opts.price)}\n` : "";
-
-    const message = `Hello BelleHairs Owerri,\n\nI want to order:\nProduct: ${product?.name ?? ""}\nCategory: ${product?.category ?? ""}\n${lengthLine}${priceLine}\nDelivery location: Owerri (or your city)\n\nMy name is:`;
-    return `${whatsappBaseUrl}?text=${encodeURIComponent(message)}`;
-  };
 
   if (!product) {
     return (
@@ -191,17 +185,19 @@ export default function ProductDetailClient(props: {
                 )}
               </div>
 
-              <a
-                href={buildWhatsAppHref({
-                  lengthInches: selectedVariant?.lengthInches,
-                  price: selectedVariant?.price,
-                })}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex w-full items-center justify-center rounded-full bg-brand px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
+              <button
+                type="button"
+                disabled={!selectedVariant}
+                onClick={() => {
+                  if (!selectedVariant) return;
+                  const id = `${product.id}:${selectedVariant.lengthInches}`;
+                  if (!cartItems.some((i) => i.id === id)) addItem(product.id, selectedVariant.lengthInches);
+                  router.push("/checkout");
+                }}
+                className="inline-flex w-full items-center justify-center rounded-full bg-brand px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A] disabled:opacity-60"
               >
                 Order on WhatsApp
-              </a>
+              </button>
               <AddToCartButton
                 productId={product.id}
                 variantLengthInches={selectedVariant?.lengthInches}
@@ -211,20 +207,22 @@ export default function ProductDetailClient(props: {
                 }
               />
               <p className="text-xs text-foreground/60">
-                Prefer chat? Tap “Order on WhatsApp” and we’ll confirm availability, lengths,
-                and delivery.
+                Tap “Order on WhatsApp” to continue to checkout and send your order via WhatsApp.
               </p>
             </div>
           ) : (
             <div className="space-y-3">
-              <a
-                href={buildWhatsAppHref({ price: product.price })}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() => {
+                  const id = `${product.id}:base`;
+                  if (!cartItems.some((i) => i.id === id)) addItem(product.id);
+                  router.push("/checkout");
+                }}
                 className="inline-flex w-full items-center justify-center rounded-full bg-brand px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
               >
                 Order on WhatsApp
-              </a>
+              </button>
               <AddToCartButton productId={product.id} />
             </div>
           )}

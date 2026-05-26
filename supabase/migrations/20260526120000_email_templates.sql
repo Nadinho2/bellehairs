@@ -1,3 +1,5 @@
+create extension if not exists pgcrypto;
+
 create table if not exists public.email_templates (
   key text primary key,
   name text not null,
@@ -46,7 +48,7 @@ end $$;
 
 create table if not exists public.order_email_events (
   id uuid primary key default gen_random_uuid(),
-  order_id text not null references public.orders(id) on delete cascade,
+  order_id uuid not null references public.orders(id) on delete cascade,
   template_key text not null references public.email_templates(key) on delete restrict,
   template_name text null,
   kind text not null,

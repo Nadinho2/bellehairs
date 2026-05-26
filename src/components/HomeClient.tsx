@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import EmailCaptureModal from "@/components/EmailCaptureModal";
@@ -78,13 +79,13 @@ function productTag(product: Product) {
 
 function HomeProductCard(props: { product: Product }) {
   const { product } = props;
+  const router = useRouter();
   const addItem = useCartStore((s) => s.addItem);
+  const cartItems = useCartStore((s) => s.items);
   const wishlist = useWishlist();
 
-  const whatsappHref = useMemo(() => {
-    const message = `Hello BelleHairs Owerri,\n\nI want to order:\nProduct: ${product.name}\nPrice: ${formatPrice(product.price)}\n\nDelivery location: Owerri (or your city)\n\nMy name is:`;
-    return `https://wa.me/2349126914795?text=${encodeURIComponent(message)}`;
-  }, [product.name, product.price]);
+  const cartId = useMemo(() => `${product.id}:base`, [product.id]);
+  const inCart = useMemo(() => cartItems.some((i) => i.id === cartId), [cartId, cartItems]);
 
   return (
     <div className="relative w-[270px] shrink-0 overflow-hidden rounded-3xl border border-black/10 bg-white shadow-sm transition hover:shadow-md sm:w-auto">
@@ -129,14 +130,16 @@ function HomeProductCard(props: { product: Product }) {
           >
             Add to Cart
           </button>
-          <a
-            href={whatsappHref}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            type="button"
+            onClick={() => {
+              if (!inCart) addItem(product.id);
+              router.push("/checkout");
+            }}
             className="inline-flex w-full items-center justify-center rounded-full bg-[#25D366] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-95"
           >
             Order on WhatsApp
-          </a>
+          </button>
         </div>
       </div>
     </div>
