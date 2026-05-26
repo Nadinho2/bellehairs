@@ -32,6 +32,17 @@ export default function ProductDetailClient(props: {
     return variants.find((v) => v.lengthInches === selectedLengthInches) ?? null;
   }, [selectedLengthInches, variants]);
 
+  const detailRows = useMemo(() => {
+    const rows: Array<{ label: string; value: string }> = [];
+    if (product?.hairType) rows.push({ label: "Hair type", value: product.hairType });
+    if (product?.texture) rows.push({ label: "Texture", value: product.texture });
+    if (product?.closureType) rows.push({ label: "Closure type", value: product.closureType });
+    if (product?.accessoryType) rows.push({ label: "Accessory type", value: product.accessoryType });
+    const lengths = product?.lengths?.length ? product.lengths : null;
+    if (lengths) rows.push({ label: "Available lengths", value: lengths.join(", ") });
+    return rows;
+  }, [product]);
+
   useEffect(() => {
     if (!lightboxSrc) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -125,6 +136,16 @@ export default function ProductDetailClient(props: {
           </div>
 
           <div className="rounded-2xl border border-border bg-card p-5 text-white">
+            {detailRows.length ? (
+              <div className="mb-4 grid gap-2 rounded-2xl border border-white/10 bg-black/40 p-4">
+                {detailRows.map((r) => (
+                  <div key={r.label} className="flex items-start justify-between gap-4 text-sm">
+                    <p className="text-white/70">{r.label}</p>
+                    <p className="text-right font-semibold text-white">{r.value}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <p className="text-sm leading-7 text-white/80">{product.description}</p>
           </div>
 
