@@ -40,7 +40,7 @@ const FAQS = [
     a: "Yes for eligible cases like wrong item sent or damaged item. Please see our Return & Exchange Policy for full details.",
   },
   {
-    q: "How do I contact BelleHairs?",
+    q: "How do I contact Belle Hairs?",
     a: "Call/WhatsApp 0912 691 4795 or message us on @bellehairsng.",
   },
 ] as const;
@@ -51,7 +51,7 @@ export default function FaqPage() {
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-12">
       <div className="text-center">
-        <p className="text-xs font-semibold text-brand">BelleHairs Owerri</p>
+        <p className="text-xs font-semibold text-brand">Belle Hairs</p>
         <h1 className="mt-2 text-4xl font-semibold tracking-tight text-foreground">
           Frequently Asked Questions
         </h1>
@@ -91,4 +91,3 @@ export default function FaqPage() {
     </div>
   );
 }
-

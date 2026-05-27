@@ -6,7 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import { defaultDeliveryFeeConfig, getDeliveryQuote } from "@/lib/delivery";
 import type { OrderStatus } from "@/lib/supabase/types";
 
-const FROM = `"BelleHairs Owerri 💕" <hello@boomkas.com>`;
+const FROM = `"Belle Hairs 💕" <hello@boomkas.com>`;
 const BRAND_PINK = "#E91E8C";
 const SITE_URL = "https://bellehairs.vercel.app";
 
@@ -112,7 +112,7 @@ function wrapEmail(params: {
                   <tr>
                     <td style="vertical-align:middle;">
                       <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial; font-weight:800; letter-spacing:-0.02em; color:${BRAND_PINK}; font-size:18px;">
-                        BelleHairs Owerri
+                        Belle Hairs
                       </div>
                       <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial; color:#ffffffb3; font-size:12px; margin-top:2px;">
                         A Home of Wigs and Hairs
@@ -135,7 +135,7 @@ function wrapEmail(params: {
             <tr>
               <td style="padding:16px 22px 22px 22px;">
                 <div style="border-top:1px solid #eee;padding-top:14px;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#666;font-size:12px;line-height:18px;">
-                  © BelleHairs Owerri | Owerri, Nigeria | 0912 691 4795<br />
+                  © Belle Hairs | Owerri, Nigeria | 0912 691 4795<br />
                   <a href="${params.unsubscribeHref}" style="color:${BRAND_PINK};text-decoration:underline;">Unsubscribe</a>
                 </div>
               </td>
@@ -283,7 +283,7 @@ export async function sendWelcomeEmail(params: { to: string; source: string }) {
 
   const bodyHtml = `
     <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#111;">
-      <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">Welcome to the BelleHairs VIP List 👑</h1>
+      <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">Welcome to the Belle Hairs VIP List 👑</h1>
       <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
         You&apos;re officially on the list. Get first access to new arrivals, flash sales, and exclusive deals.
       </p>
@@ -297,7 +297,7 @@ export async function sendWelcomeEmail(params: { to: string; source: string }) {
       <p style="margin:0 0 16px 0;color:#444;line-height:22px;font-size:14px;">
         Ready to shop? Tap below.
       </p>
-      ${primaryButton(`${SITE_URL}/products`, "Shop BelleHairs")}
+      ${primaryButton(`${SITE_URL}/products`, "Shop Belle Hairs")}
       <p style="margin:16px 0 0 0;color:#666;line-height:20px;font-size:12px;">
         Subscribed via: ${escapeHtml(params.source)}
       </p>
@@ -306,9 +306,9 @@ export async function sendWelcomeEmail(params: { to: string; source: string }) {
 
   await sendEmail({
     to: params.to,
-    subject: "Welcome to the BelleHairs VIP List 👑",
+    subject: "Welcome to the Belle Hairs VIP List 👑",
     html: wrapEmail({
-      title: "Welcome to the BelleHairs VIP List",
+      title: "Welcome to the Belle Hairs VIP List",
       preheader: "Your 10% code: BELLE10",
       bodyHtml,
       unsubscribeHref: unsubscribeUrl(params.to),
@@ -449,7 +449,7 @@ export async function sendOrderStatusEmail(params: {
       subject,
       html: wrapEmail({
         title: subject,
-        preheader: `${statusLabel(params.status)} • BelleHairs Owerri`,
+        preheader: `${statusLabel(params.status)} • Belle Hairs`,
         bodyHtml,
         unsubscribeHref: unsubscribeUrl(params.to),
       }),
@@ -468,17 +468,17 @@ export async function sendOrderStatusEmail(params: {
   const subject = (() => {
     switch (params.status) {
       case "order_received":
-        return "📦 We've Received Your Order — BelleHairs Owerri";
+        return "📦 We've Received Your Order — Belle Hairs";
       case "payment_received":
         return "✅ Payment Confirmed — Your Order is Being Processed!";
       case "order_confirmed":
-        return "🎀 Your BelleHairs Order is Confirmed!";
+        return "🎀 Your Belle Hairs Order is Confirmed!";
       case "dispatched":
-        return "🚚 Your Order is On Its Way — BelleHairs Owerri";
+        return "🚚 Your Order is On Its Way — Belle Hairs";
       case "delivered":
-        return "💕 Your BelleHairs Order Has Been Delivered!";
+        return "💕 Your Belle Hairs Order Has Been Delivered!";
       case "cancelled":
-        return "❌ Your BelleHairs Order Has Been Cancelled";
+        return "❌ Your Belle Hairs Order Has Been Cancelled";
     }
   })();
 
@@ -618,7 +618,7 @@ export async function sendOrderStatusEmail(params: {
         Need help? Call/WhatsApp: <strong>0912 691 4795</strong>
       </p>
       <p style="margin:12px 0 0 0;color:#444;line-height:22px;font-size:14px;">
-        Thank you for choosing BelleHairs Owerri — A Home of Wigs and Hairs.
+        Thank you for choosing Belle Hairs — A Home of Wigs and Hairs.
       </p>
     </div>
   `;
@@ -628,7 +628,7 @@ export async function sendOrderStatusEmail(params: {
     subject,
     html: wrapEmail({
       title: subject,
-      preheader: `${statusLabel(params.status)} • BelleHairs Owerri`,
+      preheader: `${statusLabel(params.status)} • Belle Hairs`,
       bodyHtml,
       unsubscribeHref: unsubscribeUrl(params.to),
     }),
@@ -639,7 +639,7 @@ export type PaymentReminderCode = "R1" | "R2" | "R3" | "R4" | "R5";
 
 function storeWhatsAppHref(params: { customerName: string; orderId: string; message: string }) {
   const greetingName = params.customerName.trim().split(/\s+/)[0] || params.customerName.trim() || "there";
-  const full = `Hi BelleHairs Owerri,\n\n${params.message}\n\nCustomer: ${greetingName}\nOrder ID: ${params.orderId}\n\nI am sending my payment proof now.`;
+  const full = `Hi Belle Hairs,\n\n${params.message}\n\nCustomer: ${greetingName}\nOrder ID: ${params.orderId}\n\nI am sending my payment proof now.`;
   return `https://wa.me/2349126914795?text=${encodeURIComponent(full)}`;
 }
 
@@ -739,7 +739,7 @@ export async function sendPaymentReminderEmail(params: {
       subject,
       html: wrapEmail({
         title: subject,
-        preheader: "Payment reminder • BelleHairs Owerri",
+        preheader: "Payment reminder • Belle Hairs",
         bodyHtml,
         unsubscribeHref: unsubscribeUrl(params.to),
       }),
@@ -941,7 +941,7 @@ export async function sendPaymentReminderEmail(params: {
     subject,
     html: wrapEmail({
       title: subject,
-      preheader: `Payment reminder • BelleHairs Owerri`,
+      preheader: `Payment reminder • Belle Hairs`,
       bodyHtml,
       unsubscribeHref: unsubscribeUrl(params.to),
     }),

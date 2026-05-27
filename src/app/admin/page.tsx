@@ -285,10 +285,10 @@ export default function AdminPage() {
             View shop
           </Link>
           <Link
-            href="/admin/banners"
+            href="/admin/homepage"
             className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
           >
-            Banners
+            Homepage
           </Link>
           <Link
             href="/admin/orders"
@@ -883,7 +883,7 @@ export default function AdminPage() {
                   ) : (
                     <div className="flex h-full w-full items-center justify-center bg-brand">
                       <p className="text-3xl leading-none text-white" style={{ fontFamily: "var(--font-logo)" }}>
-                        BelleHairs
+                        Belle Hairs
                       </p>
                     </div>
                   )}

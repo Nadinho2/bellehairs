@@ -139,7 +139,7 @@ export default function Navbar() {
               className="text-2xl leading-none"
               style={{ fontFamily: "var(--font-logo)" }}
             >
-              BelleHairs
+              Belle Hairs
             </span>
           </Link>
 
@@ -252,7 +252,7 @@ export default function Navbar() {
                 className="text-2xl leading-none"
                 style={{ fontFamily: "var(--font-logo)" }}
               >
-                BelleHairs
+                Belle Hairs
               </span>
               <button
                 type="button"

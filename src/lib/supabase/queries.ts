@@ -2,23 +2,12 @@ import "server-only";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
-  BannerSlideRow,
+  HomepageHeroGridRow,
   HomepageCategoryCardRow,
   ProductRow,
   ReviewRow,
   SocialFeedRow,
 } from "@/lib/supabase/types";
-
-export async function fetchActiveBannerSlides(): Promise<BannerSlideRow[]> {
-  const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase
-    .from("banner_slides")
-    .select("*")
-    .eq("is_active", true)
-    .order("slide_order", { ascending: true });
-  if (error) throw new Error(error.message);
-  return (data ?? []) as BannerSlideRow[];
-}
 
 export async function fetchHomepageProducts() {
   const supabase = await createSupabaseServerClient();
@@ -57,12 +46,28 @@ export async function fetchHomepageCategoryCards(): Promise<HomepageCategoryCard
   return (data ?? []) as HomepageCategoryCardRow[];
 }
 
+export async function fetchHomepageHeroGrid(): Promise<HomepageHeroGridRow[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from("homepage_hero_grid").select("*");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as HomepageHeroGridRow[];
+}
+
 export async function fetchAllProducts(): Promise<ProductRow[]> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("products")
     .select("*")
     .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ProductRow[];
+}
+
+export async function fetchProductsByIds(ids: string[]): Promise<ProductRow[]> {
+  const unique = Array.from(new Set(ids.map((x) => String(x).trim()).filter(Boolean)));
+  if (!unique.length) return [];
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from("products").select("*").in("id", unique).limit(100);
   if (error) throw new Error(error.message);
   return (data ?? []) as ProductRow[];
 }

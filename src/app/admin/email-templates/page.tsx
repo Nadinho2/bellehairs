@@ -52,7 +52,7 @@ function brandPreviewHtml(contentHtml: string) {
       <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;">
         <div style="background:#000000;padding:18px 22px;">
           <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;font-weight:800;letter-spacing:-0.02em;color:#E91E8C;font-size:18px;">
-            BelleHairs Owerri
+            Belle Hairs
           </div>
           <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#ffffffb3;font-size:12px;margin-top:2px;">
             A Home of Wigs and Hairs
@@ -63,7 +63,7 @@ function brandPreviewHtml(contentHtml: string) {
         </div>
         <div style="padding:16px 22px 22px 22px;">
           <div style="border-top:1px solid #eee;padding-top:14px;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#666;font-size:12px;line-height:18px;">
-            © BelleHairs Owerri | Owerri, Nigeria | 0912 691 4795<br />
+            © Belle Hairs | Owerri, Nigeria | 0912 691 4795<br />
             <span style="color:#E91E8C;text-decoration:underline;">Unsubscribe</span>
           </div>
         </div>

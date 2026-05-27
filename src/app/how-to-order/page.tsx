@@ -6,9 +6,9 @@ export default function HowToOrderPage() {
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-12">
       <div className="text-center">
-        <p className="text-xs font-semibold text-brand">BelleHairs Owerri</p>
+        <p className="text-xs font-semibold text-brand">Belle Hairs</p>
         <h1 className="mt-2 text-4xl font-semibold tracking-tight text-foreground">
-          How to Order from BelleHairs
+          How to Order from Belle Hairs
         </h1>
         <p className="mx-auto mt-3 max-w-2xl text-sm text-foreground/70">
           Ordering is easy. Follow these simple steps and we&apos;ll take care of the
@@ -70,4 +70,3 @@ function StepCard(props: {
     </div>
   );
 }
-

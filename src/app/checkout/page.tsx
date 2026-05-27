@@ -211,7 +211,7 @@ export default function CheckoutPage() {
       ? `Phone: ${primary} / ${secondary}\n`
       : `Phone: ${primary}\n`;
 
-    const message = `Hello BelleHairs Owerri,\n\nI want to place an order.\n\nCustomer details:\nName: ${fullName.trim()}\nEmail: ${email.trim()}\n${customerPhonesLine}${deliverySection}${deliveryFeeLine}${note}\nOrder summary:\n${orderLines}\n\nSubtotal: ${formatPrice(total)}\nDelivery fee: ${formatPrice(deliveryFee)}\nTotal: ${formatPrice(grandTotal)}`;
+    const message = `Hello Belle Hairs,\n\nI want to place an order.\n\nCustomer details:\nName: ${fullName.trim()}\nEmail: ${email.trim()}\n${customerPhonesLine}${deliverySection}${deliveryFeeLine}${note}\nOrder summary:\n${orderLines}\n\nSubtotal: ${formatPrice(total)}\nDelivery fee: ${formatPrice(deliveryFee)}\nTotal: ${formatPrice(grandTotal)}`;
 
     return `https://wa.me/2349126914795?text=${encodeURIComponent(message)}`;
   })();
@@ -219,7 +219,7 @@ export default function CheckoutPage() {
   const customerConfirmHref = (() => {
     if (!phonePrimaryNormalized) return null;
     const firstName = fullName.trim().split(/\s+/)[0] || "there";
-    const message = `Hi ${firstName}, BelleHairs Owerri here.\n\nWe’ve received your order request on WhatsApp. We’ll confirm availability, total cost, and delivery details shortly.\n\nThank you for choosing BelleHairs Owerri — A Home of Wigs and Hairs.`;
+    const message = `Hi ${firstName}, Belle Hairs here.\n\nWe’ve received your order request on WhatsApp. We’ll confirm availability, total cost, and delivery details shortly.\n\nThank you for choosing Belle Hairs — A Home of Wigs and Hairs.`;
     return `https://wa.me/${phonePrimaryNormalized}?text=${encodeURIComponent(message)}`;
   })();
 
@@ -429,7 +429,7 @@ export default function CheckoutPage() {
             </div>
 
             <p className="text-xs text-foreground/60">
-              The button opens WhatsApp to BelleHairs (0912 691 4795) with your order
+              The button opens WhatsApp to Belle Hairs (0912 691 4795) with your order
               details pre-filled, then opens a confirmation message to your own
               WhatsApp number.
             </p>

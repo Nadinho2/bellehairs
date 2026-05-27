@@ -5,10 +5,10 @@ export default function AboutPage() {
         <div className="space-y-4">
           <p className="text-xs font-semibold text-brand">About</p>
           <h1 className="text-4xl font-semibold tracking-tight text-foreground">
-            BelleHairs Owerri
+            Belle Hairs
           </h1>
           <p className="text-base leading-7 text-foreground/70">
-            BelleHairs Owerri is a premium hair brand based in Owerri, Nigeria.
+            Belle Hairs is a premium hair brand based in Owerri, Nigeria.
             We help women feel confident with luxury wigs, bundles, closures, and
             frontals — carefully curated for a flawless, feminine finish.
           </p>
@@ -43,7 +43,7 @@ export default function AboutPage() {
               </p>
             </div>
             <a
-              href="https://wa.me/2349126914795?text=Hello%20BelleHairs%20Owerri%2C%20I%20need%20help%20choosing%20a%20wig%20or%20hair."
+              href="https://wa.me/2349126914795?text=Hello%20Belle%20Hairs%2C%20I%20need%20help%20choosing%20a%20wig%20or%20hair."
               target="_blank"
               rel="noreferrer"
               className="inline-flex w-full items-center justify-center rounded-full bg-brand px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A]"

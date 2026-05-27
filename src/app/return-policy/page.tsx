@@ -4,7 +4,7 @@ export default function ReturnPolicyPage() {
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-12">
       <div className="text-center">
-        <p className="text-xs font-semibold text-brand">BelleHairs Owerri</p>
+        <p className="text-xs font-semibold text-brand">Belle Hairs</p>
         <h1 className="mt-2 text-4xl font-semibold tracking-tight text-foreground">
           Return & Exchange Policy
         </h1>

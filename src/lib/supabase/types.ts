@@ -28,15 +28,11 @@ export type ProductRow = {
   created_at: string;
 };
 
-export type BannerSlideRow = {
-  id: string;
-  heading: string;
-  subtext: string | null;
-  image_url: string;
-  cta_label: string | null;
-  cta_link: string | null;
-  is_active: boolean | null;
-  slide_order: number | null;
+export type HomepageHeroGridRow = {
+  slot: string;
+  product_id: string | null;
+  updated_at?: string;
+  updated_by?: string | null;
 };
 
 export type SocialFeedRow = {

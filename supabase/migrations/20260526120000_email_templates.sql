@@ -215,7 +215,7 @@ $$,
     'system_order_received',
     'Order Received',
     'system',
-    '📦 We''ve Received Your Order — BelleHairs Owerri',
+    '📦 We''ve Received Your Order — Belle Hairs',
     $$
 <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#111;">
   <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">📦 We''ve Received Your Order</h1>
@@ -248,7 +248,7 @@ $$,
     'system_order_confirmed',
     'Order Confirmed',
     'system',
-    '🎀 Your BelleHairs Order is Confirmed!',
+    '🎀 Your Belle Hairs Order is Confirmed!',
     $$
 <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#111;">
   <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">🎀 Order Confirmed</h1>
@@ -265,7 +265,7 @@ $$,
     'system_dispatched',
     'Dispatched',
     'system',
-    '🚚 Your Order is On Its Way — BelleHairs Owerri',
+    '🚚 Your Order is On Its Way — Belle Hairs',
     $$
 <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#111;">
   <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">🚚 Your Order is On Its Way</h1>
@@ -282,7 +282,7 @@ $$,
     'system_delivered',
     'Delivered',
     'system',
-    '💕 Your BelleHairs Order Has Been Delivered!',
+    '💕 Your Belle Hairs Order Has Been Delivered!',
     $$
 <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#111;">
   <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">💕 Delivered</h1>
@@ -298,7 +298,7 @@ $$,
     'system_cancelled',
     'Cancelled',
     'system',
-    '❌ Your BelleHairs Order Has Been Cancelled',
+    '❌ Your Belle Hairs Order Has Been Cancelled',
     $$
 <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#111;">
   <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">❌ Order Cancelled</h1>
@@ -313,10 +313,10 @@ $$,
     'system_welcome',
     'Welcome Email',
     'system',
-    'Welcome to the BelleHairs VIP List 👑',
+    'Welcome to the Belle Hairs VIP List 👑',
     $$
 <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#111;">
-  <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">Welcome to the BelleHairs VIP List 👑</h1>
+  <h1 style="margin:0 0 10px 0;font-size:22px;letter-spacing:-0.02em;">Welcome to the Belle Hairs VIP List 👑</h1>
   <p style="margin:0 0 14px 0;color:#444;line-height:22px;font-size:14px;">
     You''re officially on the list. Get first access to new arrivals, flash sales, and exclusive deals.
   </p>
@@ -332,7 +332,7 @@ $$,
   </p>
   <div style="margin-top:10px;">
     <a href="https://bellehairs.vercel.app/products" style="display:inline-block;background:#E91E8C;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:999px;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;font-size:14px;font-weight:800;">
-      Shop BelleHairs
+      Shop Belle Hairs
     </a>
   </div>
   <p style="margin:16px 0 0 0;color:#666;line-height:20px;font-size:12px;">
@@ -346,7 +346,7 @@ $$,
     'marketing_newsletter',
     'Newsletter/Campaign',
     'marketing',
-    '✨ New from BelleHairs — {{headline}}',
+    '✨ New from Belle Hairs — {{headline}}',
     $$
 <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#111;">
   <h2 style="margin:0 0 10px 0;font-size:20px;letter-spacing:-0.02em;">{{headline}}</h2>

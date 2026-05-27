@@ -21,7 +21,7 @@ export default function Footer() {
             className="text-3xl leading-none"
             style={{ fontFamily: "var(--font-logo)" }}
           >
-            BelleHairs
+            Belle Hairs
           </p>
           <p className="mt-2 text-sm text-white/70">Owerri • A Home of Wigs and Hairs</p>
         </div>
@@ -221,7 +221,7 @@ export default function Footer() {
           </div>
 
           <div className="mt-6 text-center text-xs text-white/60">
-            <p>© 2025 BelleHairs Owerri. All Rights Reserved.</p>
+            <p>© 2025 Belle Hairs. All Rights Reserved.</p>
           </div>
         </div>
       </div>

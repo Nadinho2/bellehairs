@@ -17,11 +17,9 @@ import type { Product } from "@/types/product";
 const SUBSCRIBED_COOKIE = "bh_email_subscribed";
 const PROMO_LAST_SHOWN_COOKIE = "bh_promo_last_shown";
 
-export type HomeSlide = {
-  title: string;
-  cta: string;
-  href: string;
-  image: string;
+type HomeHeroSlot = {
+  slot: "slot_1" | "slot_2" | "slot_3" | "slot_4" | "slot_5";
+  product: Product | null;
 };
 
 function SectionTitle(props: { title: string }) {
@@ -146,6 +144,50 @@ function HomeProductCard(props: { product: Product }) {
   );
 }
 
+function HeroTile(props: {
+  label: string;
+  product: Product | null;
+  fallback: { name: string; price: string; href: string };
+  className?: string;
+}) {
+  const href = props.product ? `/products/${props.product.id}` : props.fallback.href;
+  const img = props.product?.images?.[0] ?? props.product?.image ?? null;
+  const name = props.product?.name ?? props.fallback.name;
+  const price = props.product ? `From ${formatPrice(props.product.price)}` : props.fallback.price;
+
+  return (
+    <Link
+      href={href}
+      className={`group relative overflow-hidden rounded-2xl bg-black ${props.className ?? ""}`}
+    >
+      {img ? (
+        <Image
+          src={img}
+          alt={name}
+          fill
+          className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.05]"
+          unoptimized={img.startsWith("data:")}
+        />
+      ) : (
+        <div className="absolute inset-0 bg-black" />
+      )}
+
+      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent transition-colors duration-300 ease-out group-hover:from-black/90" />
+
+      <div className="absolute inset-x-0 bottom-0 p-5">
+        <p className="text-[11px] font-semibold tracking-[0.22em] text-brand">{props.label.toUpperCase()}</p>
+        <p className="mt-2 text-lg font-semibold tracking-tight text-white md:text-xl">{name}</p>
+        <p className="mt-1 text-xs text-white/70">{price}</p>
+        <div className="mt-4">
+          <span className="inline-flex items-center justify-center rounded-full bg-brand px-4 py-2 text-xs font-semibold text-white opacity-0 translate-y-2 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-y-0">
+            Shop Now →
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
 function CategoryCard(props: { title: string; href: string; image?: string | null }) {
   return (
     <Link
@@ -158,7 +200,7 @@ function CategoryCard(props: { title: string; href: string; image?: string | nul
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-brand">
             <p className="text-3xl leading-none text-white" style={{ fontFamily: "var(--font-logo)" }}>
-              BelleHairs
+              Belle Hairs
             </p>
           </div>
         )}
@@ -221,25 +263,14 @@ function isSubscribed() {
 }
 
 export default function HomeClient(props: {
-  slides: HomeSlide[];
+  heroGrid: HomeHeroSlot[];
   newArrivals: Product[];
   bestSellers: Product[];
   featured: Product[];
   socialImages: (string | null)[];
   categoryCardImages?: Record<DbProductCategory, string | null>;
 }) {
-  const [slide, setSlide] = useState(0);
   const [promoOpen, setPromoOpen] = useState(false);
-
-  const slides = props.slides.length ? props.slides : [];
-
-  useEffect(() => {
-    if (slides.length < 2) return;
-    const id = window.setInterval(() => {
-      setSlide((s) => (s + 1) % slides.length);
-    }, 4000);
-    return () => window.clearInterval(id);
-  }, [slides.length]);
 
   useEffect(() => {
     if (isSubscribed()) return;
@@ -271,8 +302,6 @@ export default function HomeClient(props: {
   const socialRef = useReveal();
   const contactRef = useReveal();
 
-  const current = slides[slide];
-
   return (
     <div className="w-full">
       <EmailCaptureModal
@@ -287,92 +316,153 @@ export default function HomeClient(props: {
         }}
       />
 
-      <section ref={heroRef} className="reveal relative">
-        <div className="relative h-[520px] w-full overflow-hidden bg-black md:h-[600px]">
-          {current ? (
-            <>
-              <Image
-                src={current.image}
-                alt={current.title}
-                fill
-                className="object-cover"
-                priority
-              />
-              <div className="absolute inset-0 bg-black/60" />
+      <section ref={heroRef} className="reveal bg-[#0a0a0a] py-14">
+        <div className="mx-auto w-full max-w-6xl px-4">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-xs font-semibold tracking-[0.22em] text-brand">
+              ✦ PREMIUM HAIR — OWERRI, NIGERIA
+            </p>
+            <h1 className="mt-4 text-4xl font-bold tracking-tight text-white md:text-6xl">
+              Your Crown Deserves the{" "}
+              <span className="font-bold italic text-brand">Very Best</span>
+            </h1>
+            <p className="mx-auto mt-4 max-w-2xl text-sm text-white/60 md:text-base">
+              Shop premium wigs, weavon & accessories. Delivered nationwide.
+            </p>
+            <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Link
+                href="/products?category=Wigs"
+                className="inline-flex items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#C2177A]"
+              >
+                Shop Wigs
+              </Link>
+              <Link
+                href="/products"
+                className="inline-flex items-center justify-center rounded-full border border-white/30 bg-transparent px-7 py-3 text-sm font-semibold text-white transition hover:border-brand"
+              >
+                Browse All
+              </Link>
+            </div>
+          </div>
 
-              <div className="mx-auto flex h-full w-full max-w-6xl items-center px-4">
-                <div className="max-w-2xl space-y-5 text-white">
-                  <h1 className="text-4xl font-semibold leading-tight md:text-6xl">
-                    {current.title}
-                  </h1>
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    {current.href.startsWith("http") ? (
-                      <a
-                        href={current.href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#C2177A]"
-                      >
-                        {current.cta}
-                      </a>
-                    ) : (
-                      <Link
-                        href={current.href}
-                        className="inline-flex items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#C2177A]"
-                      >
-                        {current.cta}
-                      </Link>
-                    )}
-                    <Link
-                      href="/products"
-                      className="inline-flex items-center justify-center rounded-full border border-white/30 bg-white/10 px-7 py-3 text-sm font-semibold text-white backdrop-blur transition hover:border-brand"
-                    >
-                      Browse shop
-                    </Link>
-                  </div>
-                </div>
-              </div>
+          <div className="mx-auto mt-12 w-full max-w-[1100px]">
+            {(() => {
+              const bySlot = new Map(props.heroGrid.map((s) => [s.slot, s] as const));
+              const slot1 = bySlot.get("slot_1") ?? { slot: "slot_1", product: null };
+              const slot2 = bySlot.get("slot_2") ?? { slot: "slot_2", product: null };
+              const slot3 = bySlot.get("slot_3") ?? { slot: "slot_3", product: null };
+              const slot4 = bySlot.get("slot_4") ?? { slot: "slot_4", product: null };
+              const slot5 = bySlot.get("slot_5") ?? { slot: "slot_5", product: null };
 
-              {slides.length > 1 ? (
+              return (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => setSlide((s) => (s - 1 + slides.length) % slides.length)}
-                    className="absolute left-4 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/40 text-white backdrop-blur hover:border-brand"
-                    aria-label="Previous slide"
-                  >
-                    ‹
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSlide((s) => (s + 1) % slides.length)}
-                    className="absolute right-4 top-1/2 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/40 text-white backdrop-blur hover:border-brand"
-                    aria-label="Next slide"
-                  >
-                    ›
-                  </button>
+                  <div className="grid auto-rows-[220px] grid-cols-1 gap-3 md:auto-rows-[240px] md:grid-cols-2 lg:hidden">
+                    <HeroTile
+                      className="md:row-span-2"
+                      label="Best Seller"
+                      product={slot1.product}
+                      fallback={{
+                        name: "Raw Bone Straight Wig",
+                        price: "From ₦185,000",
+                        href: "/products?bestSeller=1",
+                      }}
+                    />
+                    <HeroTile
+                      label="Vietnamese Hair"
+                      product={slot2.product}
+                      fallback={{
+                        name: "Bone Straight Bundle",
+                        price: "From ₦65,000",
+                        href: "/products?category=Weavon",
+                      }}
+                    />
+                    <HeroTile
+                      label="New Arrival"
+                      product={slot3.product}
+                      fallback={{
+                        name: "HD Lace Frontal 13x4",
+                        price: "From ₦95,000",
+                        href: "/products?sort=newest",
+                      }}
+                    />
+                    <HeroTile
+                      className="md:col-span-2"
+                      label="Human Hair"
+                      product={slot4.product}
+                      fallback={{
+                        name: "Deep Wave Wig",
+                        price: "From ₦175,000",
+                        href: "/products?category=Wigs",
+                      }}
+                    />
+                    <HeroTile
+                      className="md:col-span-2"
+                      label="Accessories"
+                      product={slot5.product}
+                      fallback={{
+                        name: "Hair Care Essentials",
+                        price: "From ₦3,500",
+                        href: "/products?category=Accessories",
+                      }}
+                    />
+                  </div>
 
-                  <div className="absolute bottom-5 left-0 right-0 flex items-center justify-center gap-2">
-                    {slides.map((_, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => setSlide(i)}
-                        className={`h-2.5 w-2.5 rounded-full ${
-                          i === slide ? "bg-brand" : "bg-white/40"
-                        }`}
-                        aria-label={`Go to slide ${i + 1}`}
+                  <div className="hidden lg:grid lg:grid-cols-3 lg:grid-rows-2 lg:auto-rows-[280px] lg:gap-3">
+                    <HeroTile
+                      className="row-span-2"
+                      label="Best Seller"
+                      product={slot1.product}
+                      fallback={{
+                        name: "Raw Bone Straight Wig",
+                        price: "From ₦185,000",
+                        href: "/products?bestSeller=1",
+                      }}
+                    />
+                    <HeroTile
+                      label="Vietnamese Hair"
+                      product={slot2.product}
+                      fallback={{
+                        name: "Bone Straight Bundle",
+                        price: "From ₦65,000",
+                        href: "/products?category=Weavon",
+                      }}
+                    />
+                    <HeroTile
+                      label="New Arrival"
+                      product={slot3.product}
+                      fallback={{
+                        name: "HD Lace Frontal 13x4",
+                        price: "From ₦95,000",
+                        href: "/products?sort=newest",
+                      }}
+                    />
+
+                    <div className="col-span-2 grid h-full grid-cols-3 grid-rows-1 gap-3">
+                      <HeroTile
+                        className="col-span-2"
+                        label="Human Hair"
+                        product={slot4.product}
+                        fallback={{
+                          name: "Deep Wave Wig",
+                          price: "From ₦175,000",
+                          href: "/products?category=Wigs",
+                        }}
                       />
-                    ))}
+                      <HeroTile
+                        label="Accessories"
+                        product={slot5.product}
+                        fallback={{
+                          name: "Hair Care Essentials",
+                          price: "From ₦3,500",
+                          href: "/products?category=Accessories",
+                        }}
+                      />
+                    </div>
                   </div>
                 </>
-              ) : null}
-            </>
-          ) : (
-            <div className="flex h-full items-center justify-center text-white/70">
-              No banner slides yet.
-            </div>
-          )}
+              );
+            })()}
+          </div>
         </div>
       </section>
 
@@ -531,7 +621,7 @@ export default function HomeClient(props: {
         <div className="mx-auto w-full max-w-6xl px-4">
           <div className="text-center">
             <h2 className="text-2xl font-semibold tracking-tight text-white md:text-3xl">
-              Why Choose BelleHairs?
+              Why Choose Belle Hairs?
             </h2>
             <div className="mx-auto mt-3 h-1 w-16 rounded-full bg-brand" />
           </div>
@@ -575,7 +665,7 @@ export default function HomeClient(props: {
                 {src ? (
                   <Image
                     src={src}
-                    alt="BelleHairs social"
+                    alt="Belle Hairs social"
                     fill
                     className="object-cover"
                     unoptimized
@@ -586,7 +676,7 @@ export default function HomeClient(props: {
                       className="text-2xl leading-none text-white"
                       style={{ fontFamily: "var(--font-logo)" }}
                     >
-                      BelleHairs
+                      Belle Hairs
                     </p>
                   </div>
                 )}
@@ -605,7 +695,7 @@ export default function HomeClient(props: {
             <p className="text-2xl font-semibold">Ready to slay? Let&apos;s talk! 💬</p>
             <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
               <a
-                href="https://wa.me/2349126914795?text=Hello%20BelleHairs%20Owerri%2C%20I%20want%20to%20make%20an%20enquiry."
+                href="https://wa.me/2349126914795?text=Hello%20Belle%20Hairs%2C%20I%20want%20to%20make%20an%20enquiry."
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center justify-center rounded-full bg-black px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"

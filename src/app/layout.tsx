@@ -25,9 +25,9 @@ const dancingScript = Dancing_Script({
 });
 
 export const metadata: Metadata = {
-  title: "BelleHairs Owerri | A Home of Wigs and Hairs",
+  title: "Belle Hairs | Premium Hair — Owerri, Nigeria",
   description:
-    "BelleHairs Owerri is a premium hair brand based in Owerri, Nigeria — shop wigs, bundles, closures, and frontals.",
+    "Belle Hairs is a premium hair brand based in Owerri, Nigeria — shop wigs, weavon, and accessories. Delivered nationwide.",
 };
 
 export default function RootLayout({
@@ -45,7 +45,7 @@ export default function RootLayout({
         <main className="flex w-full flex-1 flex-col">{children}</main>
         <ExitIntentEmailCapture />
         <a
-          href="https://wa.me/2349126914795?text=Hello%20BelleHairs%20Owerri%2C%20I%20want%20to%20place%20an%20order."
+          href="https://wa.me/2349126914795?text=Hello%20Belle%20Hairs%2C%20I%20want%20to%20place%20an%20order."
           target="_blank"
           rel="noreferrer"
           aria-label="Chat on WhatsApp"

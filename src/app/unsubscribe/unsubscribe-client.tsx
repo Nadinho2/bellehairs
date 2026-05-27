@@ -22,10 +22,10 @@ export default function UnsubscribeClient() {
   return (
     <div className="mx-auto w-full max-w-xl px-4 py-12">
       <div className="rounded-3xl border border-border bg-card p-8 text-white">
-        <p className="text-xs font-semibold text-brand">BelleHairs</p>
+        <p className="text-xs font-semibold text-brand">Belle Hairs</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">Unsubscribe</h1>
         <p className="mt-2 text-sm text-white/70">
-          Enter your email to stop receiving marketing emails from BelleHairs Owerri.
+          Enter your email to stop receiving marketing emails from Belle Hairs.
         </p>
 
         <form
@@ -91,4 +91,3 @@ export default function UnsubscribeClient() {
     </div>
   );
 }
-

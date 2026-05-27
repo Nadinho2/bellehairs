@@ -1,16 +1,16 @@
-import HomeClient, { type HomeSlide } from "@/components/HomeClient";
+import HomeClient from "@/components/HomeClient";
 import { mapProductRowToProduct } from "@/lib/supabase/mappers";
 import {
-  fetchActiveBannerSlides,
   fetchHomepageCategoryCards,
+  fetchHomepageHeroGrid,
   fetchHomepageProducts,
+  fetchProductsByIds,
   fetchSocialFeed,
 } from "@/lib/supabase/queries";
 import type { DbProductCategory } from "@/lib/supabase/types";
 
 export default async function Home() {
-  const [bannerRows, homeProducts, socialRows, categoryRows] = await Promise.all([
-    fetchActiveBannerSlides().catch(() => []),
+  const [homeProducts, socialRows, categoryRows, heroRows] = await Promise.all([
     fetchHomepageProducts().catch(() => ({
       newArrivals: [],
       bestSellers: [],
@@ -18,13 +18,19 @@ export default async function Home() {
     })),
     fetchSocialFeed().catch(() => []),
     fetchHomepageCategoryCards().catch(() => []),
+    fetchHomepageHeroGrid().catch(() => []),
   ]);
 
-  const slides: HomeSlide[] = bannerRows.map((s) => ({
-    title: s.heading,
-    cta: s.cta_label ?? "Shop Now",
-    href: s.cta_link ?? "/products",
-    image: s.image_url,
+  const heroBySlot = new Map<string, string | null>();
+  for (const row of heroRows) heroBySlot.set(String(row.slot), (row.product_id as string | null) ?? null);
+
+  const slots = ["slot_1", "slot_2", "slot_3", "slot_4", "slot_5"] as const;
+  const heroIds = slots.map((s) => heroBySlot.get(s)).filter(Boolean) as string[];
+  const heroProducts = await fetchProductsByIds(heroIds).catch(() => []);
+  const heroProductById = new Map(heroProducts.map((p) => [p.id, mapProductRowToProduct(p)] as const));
+  const heroGrid = slots.map((slot) => ({
+    slot,
+    product: heroBySlot.get(slot) ? (heroProductById.get(heroBySlot.get(slot) as string) ?? null) : null,
   }));
 
   const socialImages: (string | null)[] = Array.from({ length: 6 }).map(() => null);
@@ -45,7 +51,7 @@ export default async function Home() {
 
   return (
     <HomeClient
-      slides={slides}
+      heroGrid={heroGrid}
       newArrivals={homeProducts.newArrivals.map(mapProductRowToProduct)}
       bestSellers={homeProducts.bestSellers.map(mapProductRowToProduct)}
       featured={homeProducts.featured.map(mapProductRowToProduct)}

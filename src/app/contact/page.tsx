@@ -43,7 +43,7 @@ export default function ContactPage() {
             </div>
 
             <a
-              href="https://wa.me/2349126914795?text=Hello%20BelleHairs%20Owerri%2C%20I%20want%20to%20make%20an%20enquiry."
+              href="https://wa.me/2349126914795?text=Hello%20Belle%20Hairs%2C%20I%20want%20to%20make%20an%20enquiry."
               target="_blank"
               rel="noreferrer"
               className="inline-flex w-full items-center justify-center rounded-full bg-brand px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#C2177A]"
@@ -56,4 +56,3 @@ export default function ContactPage() {
     </div>
   );
 }
-

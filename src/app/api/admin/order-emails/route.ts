@@ -78,7 +78,7 @@ function wrapEmail(params: { title: string; preheader?: string; bodyHtml: string
                   <tr>
                     <td style="vertical-align:middle;">
                       <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial; font-weight:800; letter-spacing:-0.02em; color:${BRAND_PINK}; font-size:18px;">
-                        BelleHairs Owerri
+                        Belle Hairs
                       </div>
                       <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial; color:#ffffffb3; font-size:12px; margin-top:2px;">
                         A Home of Wigs and Hairs
@@ -101,7 +101,7 @@ function wrapEmail(params: { title: string; preheader?: string; bodyHtml: string
             <tr>
               <td style="padding:16px 22px 22px 22px;">
                 <div style="border-top:1px solid #eee;padding-top:14px;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#666;font-size:12px;line-height:18px;">
-                  © BelleHairs Owerri | Owerri, Nigeria | 0912 691 4795<br />
+                  © Belle Hairs | Owerri, Nigeria | 0912 691 4795<br />
                   <a href="${params.unsubscribeHref}" style="color:${BRAND_PINK};text-decoration:underline;">Unsubscribe</a>
                 </div>
               </td>
@@ -239,7 +239,7 @@ function offerBoxHtml(offer: Record<string, unknown> | null) {
 
 function storeWhatsAppHref(params: { customerName: string; orderId: string; message: string }) {
   const greetingName = params.customerName.trim().split(/\s+/)[0] || params.customerName.trim() || "there";
-  const full = `Hi BelleHairs Owerri,\n\n${params.message}\n\nCustomer: ${greetingName}\nOrder ID: ${params.orderId}\n\nI am sending my payment proof now.`;
+  const full = `Hi Belle Hairs,\n\n${params.message}\n\nCustomer: ${greetingName}\nOrder ID: ${params.orderId}\n\nI am sending my payment proof now.`;
   return `https://wa.me/2349126914795?text=${encodeURIComponent(full)}`;
 }
 
@@ -373,7 +373,7 @@ export async function POST(request: Request) {
   const innerBody = sanitizeHtml(renderTemplateString(String(template.body_html ?? ""), vars));
   const html = wrapEmail({
     title: subject,
-    preheader: "Payment reminder • BelleHairs Owerri",
+    preheader: "Payment reminder • Belle Hairs",
     bodyHtml: innerBody,
     unsubscribeHref: unsubscribeUrl(order.customer_email),
   });
@@ -418,4 +418,3 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ ok: true, event: insertRes.data as OrderEmailEventRow });
 }
-
