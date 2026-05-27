@@ -13,8 +13,8 @@ export async function fetchHomepageProducts() {
   const supabase = await createSupabaseServerClient();
 
   const [newest, best, featured] = await Promise.all([
-    supabase.from("products").select("*").order("created_at", { ascending: false }).limit(8),
-    supabase.from("products").select("*").eq("is_best_seller", true).order("created_at", { ascending: false }).limit(8),
+    supabase.from("products").select("*").order("created_at", { ascending: false }).limit(30),
+    supabase.from("products").select("*").eq("is_best_seller", true).order("created_at", { ascending: false }).limit(30),
     supabase.from("products").select("*").eq("is_featured", true).order("created_at", { ascending: false }).limit(6),
   ]);
 
