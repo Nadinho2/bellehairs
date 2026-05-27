@@ -7,7 +7,17 @@ import ProductCard from "@/components/ProductCard";
 import { useWishlist } from "@/lib/wishlist";
 import type { HairType, Product, ProductCategory } from "@/types/product";
 
+const HAIR_CATEGORIES: ProductCategory[] = ["Wigs", "Weavon", "Bundles", "Closures", "Frontals"];
 const CATEGORY_OPTIONS: ProductCategory[] = ["Wigs", "Weavon", "Accessories"];
+const ACCESSORY_TYPE_OPTIONS = ["Oils", "Wig Caps", "Glue", "Lace Tint", "Other"] as const;
+
+function isHairProduct(p: Product) {
+  return HAIR_CATEGORIES.includes(p.category);
+}
+
+function isAccessory(p: Product) {
+  return p.category === "Accessories";
+}
 
 export default function ProductsClient(props: { products: Product[] }) {
   const router = useRouter();
@@ -18,11 +28,14 @@ export default function ProductsClient(props: { products: Product[] }) {
     "All") as ProductCategory | "All";
   const group = (searchParams.get("group") || "").toLowerCase();
   const hairType = (searchParams.get("hairType") || "") as HairType | "";
+  const accessoryType = (searchParams.get("accessoryType") || "").trim();
   const wishlistOnly = searchParams.get("wishlist") === "1";
   const bestSellerOnly = searchParams.get("bestSeller") === "1";
   const featuredOnly = searchParams.get("featured") === "1";
   const sort = (searchParams.get("sort") || "").toLowerCase();
   const q = (searchParams.get("q") || "").trim();
+
+  const isAccessoryView = selectedCategory === "Accessories" || group === "accessories";
 
   const filtered = useMemo(() => {
     const query = q.toLowerCase();
@@ -40,10 +53,13 @@ export default function ProductsClient(props: { products: Product[] }) {
       const categoryOk =
         selectedCategory === "All" || p.category === selectedCategory;
 
-      const hairTypeOk = !hairType || p.hairType === hairType;
+      const hairTypeOk = isAccessory(p) || !hairType || p.hairType === hairType;
       const bestOk = !bestSellerOnly || p.isBestSeller === true;
       const featuredOk = !featuredOnly || p.isFeatured === true;
       const wishOk = !wishlistOnly || wishlist.ids.includes(p.id);
+
+      const accessoryTypeOk =
+        !accessoryType || !isAccessory(p) || (p.accessoryType ?? "").toLowerCase() === accessoryType.toLowerCase();
 
       const queryOk =
         !query ||
@@ -55,6 +71,7 @@ export default function ProductsClient(props: { products: Product[] }) {
         groupOk &&
         categoryOk &&
         hairTypeOk &&
+        accessoryTypeOk &&
         bestOk &&
         featuredOk &&
         wishOk &&
@@ -62,6 +79,7 @@ export default function ProductsClient(props: { products: Product[] }) {
       );
     });
   }, [
+    accessoryType,
     bestSellerOnly,
     featuredOnly,
     group,
@@ -73,13 +91,25 @@ export default function ProductsClient(props: { products: Product[] }) {
     wishlist.ids,
   ]);
 
-  const finalList = useMemo(() => {
+  const sortedList = useMemo(() => {
     const list = filtered.slice();
     if (sort === "newest") {
       return list.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
     }
     return list;
   }, [filtered, sort]);
+
+  const hairProducts = useMemo(() => sortedList.filter(isHairProduct), [sortedList]);
+  const accessoryProducts = useMemo(() => sortedList.filter(isAccessory), [sortedList]);
+  const showHair = !isAccessoryView;
+  const showAccessories = isAccessoryView || selectedCategory === "All";
+
+  const setParam = (key: string, value: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) params.set(key, value);
+    else params.delete(key);
+    router.push(`/products?${params.toString()}`);
+  };
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-10">
@@ -89,7 +119,9 @@ export default function ProductsClient(props: { products: Product[] }) {
             Shop
           </h1>
           <p className="text-sm text-foreground/70">
-            Wigs, weavon, and accessories — premium quality hair.
+            {isAccessoryView
+              ? "Accessories & hair care essentials."
+              : "Wigs, weavon, and accessories — premium quality hair."}
           </p>
         </div>
 
@@ -129,8 +161,18 @@ export default function ProductsClient(props: { products: Product[] }) {
             onChange={(e) => {
               const value = e.target.value;
               const params = new URLSearchParams(searchParams.toString());
-              if (value === "All") params.delete("category");
-              else params.set("category", value);
+              if (value === "All") {
+                params.delete("category");
+                params.delete("hairType");
+                params.delete("accessoryType");
+              } else {
+                params.set("category", value);
+                if (value === "Accessories") {
+                  params.delete("hairType");
+                } else {
+                  params.delete("accessoryType");
+                }
+              }
               router.push(`/products?${params.toString()}`);
             }}
             className="h-10 rounded-full border border-black bg-black px-4 text-sm text-white focus:outline-none"
@@ -146,21 +188,75 @@ export default function ProductsClient(props: { products: Product[] }) {
         </div>
       </div>
 
-      <div className="mt-8">
-        {finalList.length === 0 ? (
-          <div className="rounded-2xl border border-black bg-black p-8 text-center text-white">
-            <p className="text-sm text-white/70">
-              No products match your filters.
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {finalList.map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
-          </div>
-        )}
-      </div>
+      {isAccessoryView ? (
+        <div className="mt-8 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setParam("accessoryType", null)}
+            className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+              !accessoryType
+                ? "bg-brand text-white"
+                : "bg-white text-black border border-black hover:border-brand"
+            }`}
+          >
+            All Accessories
+          </button>
+          {ACCESSORY_TYPE_OPTIONS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setParam("accessoryType", accessoryType === t ? null : t)}
+              className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                accessoryType === t
+                  ? "bg-brand text-white"
+                  : "bg-white text-black border border-black hover:border-brand"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {sortedList.length === 0 ? (
+        <div className="mt-8 rounded-2xl border border-black bg-black p-8 text-center text-white">
+          <p className="text-sm text-white/70">
+            No products match your filters.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-8 space-y-12">
+          {showHair && hairProducts.length > 0 ? (
+            <div>
+              {selectedCategory === "All" && accessoryProducts.length > 0 ? (
+                <h2 className="text-lg font-semibold tracking-tight text-foreground mb-5">Hair Products</h2>
+              ) : null}
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {hairProducts.map((p) => (
+                  <ProductCard key={p.id} product={p} />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {showAccessories && accessoryProducts.length > 0 ? (
+            <div>
+              {selectedCategory === "All" && hairProducts.length > 0 ? (
+                <>
+                  <div className="border-t border-black/10 pt-10">
+                    <h2 className="text-lg font-semibold tracking-tight text-foreground mb-5">Accessories & Hair Care</h2>
+                  </div>
+                </>
+              ) : null}
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {accessoryProducts.map((p) => (
+                  <ProductCard key={p.id} product={p} />
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

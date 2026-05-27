@@ -90,3 +90,30 @@ export async function fetchVisibleReviewsByProductId(productId: string): Promise
   if (error) throw new Error(error.message);
   return (data ?? []) as ReviewRow[];
 }
+
+export async function fetchAccessoryProducts(limit = 4): Promise<ProductRow[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("category", "Accessories")
+    .eq("in_stock", true)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ProductRow[];
+}
+
+export async function fetchRelatedHairProducts(category: string, excludeId: string, limit = 4): Promise<ProductRow[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("category", category)
+    .neq("id", excludeId)
+    .eq("in_stock", true)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as ProductRow[];
+}

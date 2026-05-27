@@ -11,12 +11,52 @@ import type { ReviewRow } from "@/lib/supabase/types";
 import { useCartStore } from "@/store/cartStore";
 import type { Product } from "@/types/product";
 
+function SmallProductCard(props: { product: Product }) {
+  const { product } = props;
+  const router = useRouter();
+  const addItem = useCartStore((s) => s.addItem);
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm transition hover:shadow-md">
+      <Link href={`/products/${product.id}`} className="block">
+        <div className="relative aspect-[4/3] w-full bg-black">
+          <Image
+            src={product.image}
+            alt={product.name}
+            fill
+            className="object-cover opacity-95"
+            unoptimized={product.image.startsWith("data:")}
+          />
+        </div>
+      </Link>
+      <div className="p-4">
+        <p className="line-clamp-1 text-sm font-semibold tracking-tight text-black">{product.name}</p>
+        <p className="mt-1 text-sm font-semibold text-black">{formatPrice(product.price)}</p>
+        <button
+          type="button"
+          onClick={() => {
+            addItem(product.id);
+            router.push("/checkout");
+          }}
+          className="mt-3 inline-flex w-full items-center justify-center rounded-full bg-[#25D366] px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:brightness-95"
+        >
+          Order on WhatsApp
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ProductDetailClient(props: {
   product: Product | null;
   reviews?: ReviewRow[];
+  relatedProducts?: Product[];
+  accessoryProducts?: Product[];
 }) {
   const product = props.product;
   const reviews = props.reviews ?? [];
+  const relatedProducts = props.relatedProducts ?? [];
+  const accessoryProducts = props.accessoryProducts ?? [];
   const router = useRouter();
   const addItem = useCartStore((s) => s.addItem);
   const cartItems = useCartStore((s) => s.items);
@@ -267,6 +307,33 @@ export default function ProductDetailClient(props: {
                 </div>
               );
             })}
+          </div>
+        </div>
+      ) : null}
+
+      {relatedProducts.length > 0 ? (
+        <div className="mt-12">
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+            You May Also Like
+          </h2>
+          <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {relatedProducts.map((p) => (
+              <SmallProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {accessoryProducts.length > 0 ? (
+        <div className="mt-12">
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+            Complete Your Look 💕
+          </h2>
+          <p className="mt-1 text-sm text-foreground/60">Wig caps, glue, oils & more</p>
+          <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {accessoryProducts.map((p) => (
+              <SmallProductCard key={p.id} product={p} />
+            ))}
           </div>
         </div>
       ) : null}

@@ -120,14 +120,7 @@ function HomeProductCard(props: { product: Product }) {
           {formatPrice(product.price)}
         </p>
 
-        <div className="mt-4 grid gap-3">
-          <button
-            type="button"
-            onClick={() => addItem(product.id)}
-            className="inline-flex w-full items-center justify-center rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[#C2177A]"
-          >
-            Add to Cart
-          </button>
+        <div className="mt-4">
           <button
             type="button"
             onClick={() => {
@@ -217,31 +210,6 @@ function CategoryCard(props: { title: string; href: string; image?: string | nul
   );
 }
 
-function HairTypeCard(props: { title: string; subtitle: string; href: string }) {
-  return (
-    <Link
-      href={props.href}
-      className="group rounded-3xl border border-black/10 bg-black p-6 text-white transition hover:border-brand"
-    >
-      <p className="text-lg font-semibold text-brand">{props.title}</p>
-      <p className="mt-2 text-sm text-white/70">{props.subtitle}</p>
-      <p className="mt-6 text-sm font-semibold text-white group-hover:text-brand">
-        Shop now →
-      </p>
-    </Link>
-  );
-}
-
-function WhyCard(props: { icon: string; title: string; description: string }) {
-  return (
-    <div className="rounded-3xl border border-white/15 bg-black p-6">
-      <p className="text-3xl">{props.icon}</p>
-      <p className="mt-3 text-lg font-semibold text-brand">{props.title}</p>
-      <p className="mt-2 text-sm text-white/70">{props.description}</p>
-    </div>
-  );
-}
-
 function HowToOrderStep(props: {
   step: number;
   icon: string;
@@ -296,11 +264,25 @@ export default function HomeClient(props: {
   const newRef = useReveal();
   const bestRef = useReveal();
   const howToOrderRef = useReveal();
-  const typeRef = useReveal();
-  const featuredRef = useReveal();
   const whyRef = useReveal();
   const socialRef = useReveal();
   const contactRef = useReveal();
+
+  const dedupedNewArrivals = useMemo(() => {
+    const hairOnly = props.newArrivals.filter(
+      (p) => p.category === "Wigs" || p.category === "Weavon" || p.category === "Bundles" || p.category === "Closures" || p.category === "Frontals",
+    );
+    const bestIds = new Set(props.bestSellers.map((p) => p.id));
+    return hairOnly.filter((p) => !bestIds.has(p.id)).slice(0, 4);
+  }, [props.newArrivals, props.bestSellers]);
+
+  const dedupedBestSellers = useMemo(() => {
+    const hairOnly = props.bestSellers.filter(
+      (p) => p.category === "Wigs" || p.category === "Weavon" || p.category === "Bundles" || p.category === "Closures" || p.category === "Frontals",
+    );
+    const newArrivalIds = new Set(dedupedNewArrivals.map((p) => p.id));
+    return hairOnly.filter((p) => !newArrivalIds.has(p.id)).slice(0, 4);
+  }, [props.bestSellers, dedupedNewArrivals]);
 
   return (
     <div className="w-full">
@@ -316,7 +298,7 @@ export default function HomeClient(props: {
         }}
       />
 
-      <section ref={heroRef} className="reveal bg-[#0a0a0a] py-14">
+      <section ref={heroRef} className="reveal bg-[#0a0a0a] pt-12 pb-20 md:pt-16 md:pb-24">
         <div className="mx-auto w-full max-w-6xl px-4">
           <div className="mx-auto max-w-3xl text-center">
             <p className="text-xs font-semibold tracking-[0.22em] text-brand">
@@ -348,11 +330,11 @@ export default function HomeClient(props: {
           <div className="mx-auto mt-12 w-full max-w-[1100px]">
             {(() => {
               const bySlot = new Map(props.heroGrid.map((s) => [s.slot, s] as const));
-              const slot1 = bySlot.get("slot_1") ?? { slot: "slot_1", product: null };
-              const slot2 = bySlot.get("slot_2") ?? { slot: "slot_2", product: null };
-              const slot3 = bySlot.get("slot_3") ?? { slot: "slot_3", product: null };
-              const slot4 = bySlot.get("slot_4") ?? { slot: "slot_4", product: null };
-              const slot5 = bySlot.get("slot_5") ?? { slot: "slot_5", product: null };
+              const slot1 = bySlot.get("slot_1") ?? { slot: "slot_1" as const, product: null };
+              const slot2 = bySlot.get("slot_2") ?? { slot: "slot_2" as const, product: null };
+              const slot3 = bySlot.get("slot_3") ?? { slot: "slot_3" as const, product: null };
+              const slot4 = bySlot.get("slot_4") ?? { slot: "slot_4" as const, product: null };
+              const slot5 = bySlot.get("slot_5") ?? { slot: "slot_5" as const, product: null };
 
               return (
                 <>
@@ -466,10 +448,13 @@ export default function HomeClient(props: {
         </div>
       </section>
 
-      <section ref={categoryRef} className="reveal py-14">
+      <section ref={categoryRef} className="reveal pt-20 pb-20 bg-white md:pt-20 md:pb-20">
         <div className="mx-auto w-full max-w-6xl px-4">
           <SectionTitle title="Shop by Category" />
-          <div className="mt-10 grid gap-5 md:grid-cols-3">
+          <div className="mt-6 text-center">
+            <p className="text-xs font-semibold tracking-[0.18em] text-foreground/50">HAIR PRODUCTS</p>
+          </div>
+          <div className="mt-5 grid gap-5 md:grid-cols-2">
             <CategoryCard
               title="Wigs"
               href="/products?category=Wigs"
@@ -486,23 +471,44 @@ export default function HomeClient(props: {
                 "https://images.unsplash.com/photo-1519699047748-de8e457a634e?auto=format&fit=crop&w=1400&q=80"
               }
             />
-            <CategoryCard
-              title="Accessories"
+          </div>
+
+          <div className="mt-8">
+            <p className="mb-3 text-xs font-semibold tracking-[0.18em] text-foreground/50 text-center">ACCESSORIES</p>
+            <Link
               href="/products?category=Accessories"
-              image={
-                props.categoryCardImages?.Accessories ??
-                "https://images.unsplash.com/photo-1612810436541-336d0cdbd3d6?auto=format&fit=crop&w=1400&q=80"
-              }
-            />
+              className="group relative block overflow-hidden rounded-2xl bg-black"
+            >
+              <div className="relative h-[160px] w-full md:h-[180px]">
+                {props.categoryCardImages?.Accessories ? (
+                  <Image
+                    src={props.categoryCardImages.Accessories}
+                    alt="Accessories"
+                    fill
+                    className="object-cover opacity-85"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="absolute inset-0 bg-black" />
+                )}
+                <div className="absolute inset-0 bg-black/45" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center space-y-1">
+                    <p className="text-lg font-semibold text-white">Accessories & Hair Care</p>
+                    <p className="text-sm font-semibold text-brand">Wig caps, glue, oils & more →</p>
+                  </div>
+                </div>
+              </div>
+            </Link>
           </div>
         </div>
       </section>
 
-      <section ref={newRef} className="reveal py-14">
+      <section ref={newRef} className="reveal pt-20 pb-20 bg-[#f7f7f7] md:pt-20 md:pb-20">
         <div className="mx-auto w-full max-w-6xl px-4">
           <SectionTitle title="New Arrivals" />
           <div className="mt-10 flex gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:overflow-visible lg:grid-cols-4">
-            {props.newArrivals.map((p) => (
+            {dedupedNewArrivals.map((p) => (
               <HomeProductCard key={p.id} product={p} />
             ))}
           </div>
@@ -517,11 +523,11 @@ export default function HomeClient(props: {
         </div>
       </section>
 
-      <section ref={bestRef} className="reveal py-14">
+      <section ref={bestRef} className="reveal pt-20 pb-20 bg-white md:pt-20 md:pb-20">
         <div className="mx-auto w-full max-w-6xl px-4">
           <SectionTitle title="Best Sellers" />
           <div className="mt-10 flex gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:overflow-visible lg:grid-cols-4">
-            {props.bestSellers.map((p) => (
+            {dedupedBestSellers.map((p) => (
               <HomeProductCard key={p.id} product={p} />
             ))}
           </div>
@@ -536,7 +542,7 @@ export default function HomeClient(props: {
         </div>
       </section>
 
-      <section ref={howToOrderRef} className="reveal bg-black py-14">
+      <section ref={howToOrderRef} className="reveal bg-black pt-20 pb-20 md:pt-20 md:pb-20">
         <div className="mx-auto w-full max-w-6xl px-4">
           <div className="text-center">
             <h2 className="text-2xl font-semibold tracking-tight text-white md:text-3xl">
@@ -581,80 +587,31 @@ export default function HomeClient(props: {
         </div>
       </section>
 
-      <section ref={typeRef} className="reveal py-14">
+      <section ref={whyRef} className="reveal pt-20 pb-20 bg-white md:pt-20 md:pb-20">
         <div className="mx-auto w-full max-w-6xl px-4">
-          <SectionTitle title="Shop by Hair Type" />
-          <div className="mt-10 grid gap-5 md:grid-cols-3">
-            <HairTypeCard
-              title="Human Hair"
-              subtitle="100% Natural & Durable"
-              href="/products?hairType=Human%20Hair"
-            />
-            <HairTypeCard
-              title="Vietnamese Hair"
-              subtitle="Silky, Thick & Long Lasting"
-              href="/products?hairType=Vietnamese%20Hair"
-            />
-            <HairTypeCard
-              title="Blend Hair"
-              subtitle="Affordable & Stylish"
-              href="/products?hairType=Blend%20Hair"
-            />
-          </div>
-        </div>
-      </section>
-
-      <section ref={featuredRef} className="reveal py-14">
-        <div className="mx-auto w-full max-w-6xl px-4">
-          <SectionTitle title="Hand-Picked For You" />
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {props.featured.map((p) => (
-              <div key={p.id} className="sm:col-span-1">
-                <HomeProductCard product={p} />
+          <SectionTitle title="Why Choose Belle Hairs?" />
+          <div className="mt-10 grid grid-cols-2 gap-8 md:grid-cols-4">
+            {[
+              { icon: "💯", title: "Premium Quality", desc: "Soft texture, fullness, and luxury finish." },
+              { icon: "🚚", title: "Nationwide Delivery", desc: "Fast, reliable delivery across Nigeria." },
+              { icon: "💬", title: "Easy WhatsApp Order", desc: "Chat, confirm, and order in minutes." },
+              { icon: "📍", title: "Based in Owerri", desc: "Trusted local brand, nationwide service." },
+            ].map((item) => (
+              <div key={item.title} className="text-center">
+                <p className="text-3xl">{item.icon}</p>
+                <p className="mt-3 text-sm font-semibold text-foreground">{item.title}</p>
+                <p className="mt-1 text-xs text-foreground/60 leading-relaxed">{item.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <section ref={whyRef} className="reveal bg-black py-14">
-        <div className="mx-auto w-full max-w-6xl px-4">
-          <div className="text-center">
-            <h2 className="text-2xl font-semibold tracking-tight text-white md:text-3xl">
-              Why Choose Belle Hairs?
-            </h2>
-            <div className="mx-auto mt-3 h-1 w-16 rounded-full bg-brand" />
-          </div>
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <WhyCard
-              icon="💯"
-              title="Premium Quality Hair"
-              description="Soft texture, great fullness, and luxury finish."
-            />
-            <WhyCard
-              icon="🚚"
-              title="Nationwide Delivery"
-              description="Fast, reliable delivery across Nigeria."
-            />
-            <WhyCard
-              icon="💬"
-              title="Easy WhatsApp Ordering"
-              description="Chat, confirm, and order in minutes."
-            />
-            <WhyCard
-              icon="📍"
-              title="Based in Owerri, Nigeria"
-              description="Trusted local brand with nationwide service."
-            />
-          </div>
-        </div>
-      </section>
-
-      <section ref={socialRef} className="reveal py-14">
+      <section ref={socialRef} className="reveal pt-20 pb-20 bg-[#f7f7f7] md:pt-20 md:pb-20">
         <div className="mx-auto w-full max-w-6xl px-4">
           <SectionTitle title="Follow Us @bellehairsng" />
-          <div className="mt-10 flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {props.socialImages.map((src, idx) => (
+          <div className="mt-10 flex gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden justify-center">
+            {props.socialImages.slice(0, 3).map((src, idx) => (
               <a
                 key={idx}
                 href="https://www.tiktok.com/@bellehairsng."
@@ -689,7 +646,7 @@ export default function HomeClient(props: {
         </div>
       </section>
 
-      <section ref={contactRef} className="reveal bg-brand py-12">
+      <section ref={contactRef} className="reveal bg-brand pt-12 pb-12 md:pt-14 md:pb-14">
         <div className="mx-auto w-full max-w-6xl px-4">
           <div className="flex flex-col items-center justify-between gap-6 text-center text-white md:flex-row md:text-left">
             <p className="text-2xl font-semibold">Ready to slay? Let&apos;s talk! 💬</p>

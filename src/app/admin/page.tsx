@@ -457,110 +457,125 @@ export default function AdminPage() {
 
               <NumberField label="Price (₦)" value={price} onChange={setPrice} required />
 
-              <SelectField
-                label="Hair Type"
-                value={hairType}
-                onChange={(v) => setHairType(v as DbHairType)}
-              >
-                {HAIR_TYPE_OPTIONS.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </SelectField>
+              {category === "Accessories" ? (
+                <TextField
+                  label="Accessory Type"
+                  value={accessoryType}
+                  onChange={setAccessoryType}
+                  required={false}
+                />
+              ) : (
+                <>
+                  <SelectField
+                    label="Hair Type"
+                    value={hairType}
+                    onChange={(v) => setHairType(v as DbHairType)}
+                  >
+                    {HAIR_TYPE_OPTIONS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </SelectField>
 
-              <SelectField
-                label="Hair Texture"
-                value={texture}
-                onChange={(v) => setTexture(v as DbTexture)}
-              >
-                {TEXTURE_OPTIONS.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </SelectField>
+                  <SelectField
+                    label="Hair Texture"
+                    value={texture}
+                    onChange={(v) => setTexture(v as DbTexture)}
+                  >
+                    {TEXTURE_OPTIONS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </SelectField>
 
-              <SelectField
-                label="Closure Type"
-                value={closureType}
-                onChange={setClosureType}
-                required={false}
-              >
-                <option value="">None</option>
-                {CLOSURE_OPTIONS.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </SelectField>
+                  <SelectField
+                    label="Closure Type"
+                    value={closureType}
+                    onChange={setClosureType}
+                    required={false}
+                  >
+                    <option value="">None</option>
+                    {CLOSURE_OPTIONS.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </SelectField>
 
-              <TextField
-                label="Accessory Type"
-                value={accessoryType}
-                onChange={setAccessoryType}
-                required={false}
-              />
+                  <TextField
+                    label="Accessory Type"
+                    value={accessoryType}
+                    onChange={setAccessoryType}
+                    required={false}
+                  />
+                </>
+              )}
             </div>
 
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-white">Available Lengths</p>
-              <div className="flex flex-wrap gap-2">
-                {LENGTH_OPTIONS.map((n) => {
-                  const checked = lengths.includes(n);
-                  return (
-                    <label
-                      key={n}
-                      className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/40 px-3 py-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(e) => {
-                          const on = e.target.checked;
-                          setLengths((prev) => (on ? [...prev, n] : prev.filter((x) => x !== n)));
-                          setLengthPrices((prev) => {
-                            const next = { ...prev };
-                            if (on) {
-                              if (typeof next[n] === "undefined") next[n] = price || "";
-                            } else {
-                              delete next[n];
-                            }
-                            return next;
-                          });
-                        }}
-                      />
-                      {n}&quot;
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            {lengths.length ? (
-              <div className="space-y-2">
-                <p className="text-sm font-semibold text-white">Price per length (optional)</p>
-                <p className="text-xs text-white/60">
-                  Set different prices for each selected inch. If you leave a price empty, the main price will be used.
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {[...lengths].sort((a, b) => a - b).map((n) => (
-                    <label key={n} className="block space-y-2">
-                      <span className="text-sm font-semibold text-white">{n}&quot; price (₦)</span>
-                      <input
-                        inputMode="numeric"
-                        value={lengthPrices[n] ?? ""}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace(/[^\d]/g, "");
-                          setLengthPrices((prev) => ({ ...prev, [n]: raw }));
-                        }}
-                        placeholder={price ? `Default: ${price}` : "e.g. 45000"}
-                        className="h-11 w-full rounded-2xl border border-white/15 bg-black/40 px-4 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40"
-                      />
-                    </label>
-                  ))}
+            {category !== "Accessories" ? (
+              <>
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold text-white">Available Lengths</p>
+                  <div className="flex flex-wrap gap-2">
+                    {LENGTH_OPTIONS.map((n) => {
+                      const checked = lengths.includes(n);
+                      return (
+                        <label
+                          key={n}
+                          className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/40 px-3 py-2 text-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const on = e.target.checked;
+                              setLengths((prev) => (on ? [...prev, n] : prev.filter((x) => x !== n)));
+                              setLengthPrices((prev) => {
+                                const next = { ...prev };
+                                if (on) {
+                                  if (typeof next[n] === "undefined") next[n] = price || "";
+                                } else {
+                                  delete next[n];
+                                }
+                                return next;
+                              });
+                            }}
+                          />
+                          {n}&quot;
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+
+                {lengths.length ? (
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-white">Price per length (optional)</p>
+                    <p className="text-xs text-white/60">
+                      Set different prices for each selected inch. If you leave a price empty, the main price will be used.
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {[...lengths].sort((a, b) => a - b).map((n) => (
+                        <label key={n} className="block space-y-2">
+                          <span className="text-sm font-semibold text-white">{n}&quot; price (₦)</span>
+                          <input
+                            inputMode="numeric"
+                            value={lengthPrices[n] ?? ""}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/[^\d]/g, "");
+                              setLengthPrices((prev) => ({ ...prev, [n]: raw }));
+                            }}
+                            placeholder={price ? `Default: ${price}` : "e.g. 45000"}
+                            className="h-11 w-full rounded-2xl border border-white/15 bg-black/40 px-4 text-sm text-white outline-none focus:ring-2 focus:ring-brand/40"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </>
             ) : null}
 
             <div className="grid gap-3 sm:grid-cols-2">

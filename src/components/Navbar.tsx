@@ -91,14 +91,14 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
-  const links = [
+  const hairLinks = [
     { href: "/", label: "Home" },
     { href: "/products?group=wigs", label: "Wigs" },
     { href: "/products?group=weavon", label: "Weavon" },
-    { href: "/products?category=Accessories", label: "Accessories" },
     { href: "/about", label: "About" },
     { href: "/contact", label: "Contact" },
   ];
+  const accessoryLink = { href: "/products?category=Accessories", label: "Accessories" };
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -144,7 +144,7 @@ export default function Navbar() {
           </Link>
 
           <nav className="hidden items-center gap-6 text-sm font-semibold text-white/85 md:flex">
-            {links.map((l) => (
+            {hairLinks.map((l) => (
               <Link
                 key={l.label}
                 href={l.href}
@@ -153,6 +153,13 @@ export default function Navbar() {
                 {l.label}
               </Link>
             ))}
+            <span className="h-4 w-px bg-white/20" aria-hidden="true" />
+            <Link
+              href={accessoryLink.href}
+              className={isActive(accessoryLink.href) ? "text-brand" : "hover:text-brand"}
+            >
+              {accessoryLink.label}
+            </Link>
           </nav>
 
           <div className="ml-auto flex items-center gap-2">
@@ -263,7 +270,7 @@ export default function Navbar() {
               </button>
             </div>
             <nav className="mt-6 space-y-3">
-              {links.map((l) => (
+              {hairLinks.map((l) => (
                 <Link
                   key={l.label}
                   href={l.href}
@@ -277,6 +284,18 @@ export default function Navbar() {
                   {l.label}
                 </Link>
               ))}
+              <div className="my-2 border-t border-white/10" aria-hidden="true" />
+              <Link
+                href={accessoryLink.href}
+                onClick={() => setMenuOpen(false)}
+                className={`block rounded-2xl border px-4 py-3 text-sm font-semibold ${
+                  isActive(accessoryLink.href)
+                    ? "border-brand text-brand"
+                    : "border-white/15 text-white hover:border-brand/60 hover:text-brand"
+                }`}
+              >
+                {accessoryLink.label}
+              </Link>
             </nav>
           </div>
         </div>
