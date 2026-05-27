@@ -17,11 +17,6 @@ import type { Product } from "@/types/product";
 const SUBSCRIBED_COOKIE = "bh_email_subscribed";
 const PROMO_LAST_SHOWN_COOKIE = "bh_promo_last_shown";
 
-type HomeHeroSlot = {
-  slot: "slot_1" | "slot_2" | "slot_3" | "slot_4" | "slot_5";
-  product: Product | null;
-};
-
 function SectionTitle(props: { title: string }) {
   return (
     <div className="text-center">
@@ -137,50 +132,6 @@ function HomeProductCard(props: { product: Product }) {
   );
 }
 
-function HeroTile(props: {
-  label: string;
-  product: Product | null;
-  fallback: { name: string; price: string; href: string };
-  className?: string;
-}) {
-  const href = props.product ? `/products/${props.product.id}` : props.fallback.href;
-  const img = props.product?.images?.[0] ?? props.product?.image ?? null;
-  const name = props.product?.name ?? props.fallback.name;
-  const price = props.product ? `From ${formatPrice(props.product.price)}` : props.fallback.price;
-
-  return (
-    <Link
-      href={href}
-      className={`group relative overflow-hidden rounded-2xl bg-black ${props.className ?? ""}`}
-    >
-      {img ? (
-        <Image
-          src={img}
-          alt={name}
-          fill
-          className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.05]"
-          unoptimized={img.startsWith("data:")}
-        />
-      ) : (
-        <div className="absolute inset-0 bg-black" />
-      )}
-
-      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent transition-colors duration-300 ease-out group-hover:from-black/90" />
-
-      <div className="absolute inset-x-0 bottom-0 p-5">
-        <p className="text-[11px] font-semibold tracking-[0.22em] text-brand">{props.label.toUpperCase()}</p>
-        <p className="mt-2 text-lg font-semibold tracking-tight text-white md:text-xl">{name}</p>
-        <p className="mt-1 text-xs text-white/70">{price}</p>
-        <div className="mt-4">
-          <span className="inline-flex items-center justify-center rounded-full bg-brand px-4 py-2 text-xs font-semibold text-white opacity-0 translate-y-2 transition-all duration-300 ease-out group-hover:opacity-100 group-hover:translate-y-0">
-            Shop Now →
-          </span>
-        </div>
-      </div>
-    </Link>
-  );
-}
-
 function CategoryCard(props: { title: string; href: string; image?: string | null }) {
   return (
     <Link
@@ -231,7 +182,6 @@ function isSubscribed() {
 }
 
 export default function HomeClient(props: {
-  heroGrid: HomeHeroSlot[];
   newArrivals: Product[];
   bestSellers: Product[];
   featured: Product[];
@@ -273,7 +223,7 @@ export default function HomeClient(props: {
       (p) => p.category === "Wigs" || p.category === "Weavon" || p.category === "Bundles" || p.category === "Closures" || p.category === "Frontals",
     );
     const bestIds = new Set(props.bestSellers.map((p) => p.id));
-    return hairOnly.filter((p) => !bestIds.has(p.id)).slice(0, 4);
+    return hairOnly.filter((p) => !bestIds.has(p.id)).slice(0, 6);
   }, [props.newArrivals, props.bestSellers]);
 
   const dedupedBestSellers = useMemo(() => {
@@ -281,7 +231,7 @@ export default function HomeClient(props: {
       (p) => p.category === "Wigs" || p.category === "Weavon" || p.category === "Bundles" || p.category === "Closures" || p.category === "Frontals",
     );
     const newArrivalIds = new Set(dedupedNewArrivals.map((p) => p.id));
-    return hairOnly.filter((p) => !newArrivalIds.has(p.id)).slice(0, 4);
+    return hairOnly.filter((p) => !newArrivalIds.has(p.id)).slice(0, 6);
   }, [props.bestSellers, dedupedNewArrivals]);
 
   return (
@@ -325,125 +275,6 @@ export default function HomeClient(props: {
                 Browse All
               </Link>
             </div>
-          </div>
-
-          <div className="mx-auto mt-12 w-full max-w-[1100px]">
-            {(() => {
-              const bySlot = new Map(props.heroGrid.map((s) => [s.slot, s] as const));
-              const slot1 = bySlot.get("slot_1") ?? { slot: "slot_1" as const, product: null };
-              const slot2 = bySlot.get("slot_2") ?? { slot: "slot_2" as const, product: null };
-              const slot3 = bySlot.get("slot_3") ?? { slot: "slot_3" as const, product: null };
-              const slot4 = bySlot.get("slot_4") ?? { slot: "slot_4" as const, product: null };
-              const slot5 = bySlot.get("slot_5") ?? { slot: "slot_5" as const, product: null };
-
-              return (
-                <>
-                  <div className="grid auto-rows-[220px] grid-cols-1 gap-3 md:auto-rows-[240px] md:grid-cols-2 lg:hidden">
-                    <HeroTile
-                      className="md:row-span-2"
-                      label="Best Seller"
-                      product={slot1.product}
-                      fallback={{
-                        name: "Raw Bone Straight Wig",
-                        price: "From ₦185,000",
-                        href: "/products?bestSeller=1",
-                      }}
-                    />
-                    <HeroTile
-                      label="Vietnamese Hair"
-                      product={slot2.product}
-                      fallback={{
-                        name: "Bone Straight Bundle",
-                        price: "From ₦65,000",
-                        href: "/products?category=Weavon",
-                      }}
-                    />
-                    <HeroTile
-                      label="New Arrival"
-                      product={slot3.product}
-                      fallback={{
-                        name: "HD Lace Frontal 13x4",
-                        price: "From ₦95,000",
-                        href: "/products?sort=newest",
-                      }}
-                    />
-                    <HeroTile
-                      className="md:col-span-2"
-                      label="Human Hair"
-                      product={slot4.product}
-                      fallback={{
-                        name: "Deep Wave Wig",
-                        price: "From ₦175,000",
-                        href: "/products?category=Wigs",
-                      }}
-                    />
-                    <HeroTile
-                      className="md:col-span-2"
-                      label="Accessories"
-                      product={slot5.product}
-                      fallback={{
-                        name: "Hair Care Essentials",
-                        price: "From ₦3,500",
-                        href: "/products?category=Accessories",
-                      }}
-                    />
-                  </div>
-
-                  <div className="hidden lg:grid lg:grid-cols-3 lg:grid-rows-2 lg:auto-rows-[280px] lg:gap-3">
-                    <HeroTile
-                      className="row-span-2"
-                      label="Best Seller"
-                      product={slot1.product}
-                      fallback={{
-                        name: "Raw Bone Straight Wig",
-                        price: "From ₦185,000",
-                        href: "/products?bestSeller=1",
-                      }}
-                    />
-                    <HeroTile
-                      label="Vietnamese Hair"
-                      product={slot2.product}
-                      fallback={{
-                        name: "Bone Straight Bundle",
-                        price: "From ₦65,000",
-                        href: "/products?category=Weavon",
-                      }}
-                    />
-                    <HeroTile
-                      label="New Arrival"
-                      product={slot3.product}
-                      fallback={{
-                        name: "HD Lace Frontal 13x4",
-                        price: "From ₦95,000",
-                        href: "/products?sort=newest",
-                      }}
-                    />
-
-                    <div className="col-span-2 grid h-full grid-cols-3 grid-rows-1 gap-3">
-                      <HeroTile
-                        className="col-span-2"
-                        label="Human Hair"
-                        product={slot4.product}
-                        fallback={{
-                          name: "Deep Wave Wig",
-                          price: "From ₦175,000",
-                          href: "/products?category=Wigs",
-                        }}
-                      />
-                      <HeroTile
-                        label="Accessories"
-                        product={slot5.product}
-                        fallback={{
-                          name: "Hair Care Essentials",
-                          price: "From ₦3,500",
-                          href: "/products?category=Accessories",
-                        }}
-                      />
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
           </div>
         </div>
       </section>
@@ -507,7 +338,7 @@ export default function HomeClient(props: {
       <section ref={newRef} className="reveal pt-20 pb-20 bg-[#f7f7f7] md:pt-20 md:pb-20">
         <div className="mx-auto w-full max-w-6xl px-4">
           <SectionTitle title="New Arrivals" />
-          <div className="mt-10 flex gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:overflow-visible lg:grid-cols-4">
+          <div className="mt-10 flex gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:overflow-visible lg:grid-cols-3">
             {dedupedNewArrivals.map((p) => (
               <HomeProductCard key={p.id} product={p} />
             ))}
@@ -526,7 +357,7 @@ export default function HomeClient(props: {
       <section ref={bestRef} className="reveal pt-20 pb-20 bg-white md:pt-20 md:pb-20">
         <div className="mx-auto w-full max-w-6xl px-4">
           <SectionTitle title="Best Sellers" />
-          <div className="mt-10 flex gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:overflow-visible lg:grid-cols-4">
+          <div className="mt-10 flex gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-2 sm:overflow-visible lg:grid-cols-3">
             {dedupedBestSellers.map((p) => (
               <HomeProductCard key={p.id} product={p} />
             ))}
