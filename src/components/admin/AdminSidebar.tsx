@@ -6,17 +6,13 @@ import { useState } from "react";
 import { useAdminAuth } from "./AuthProvider";
 
 const NAV_ITEMS = [
-  { href: "/admin", label: "Overview", icon: "🏠", adminOnly: false },
-  { href: "/admin/orders", label: "Orders", icon: "📦", adminOnly: false },
-  { href: "/admin/enquiries", label: "Enquiries", icon: "💬", adminOnly: false },
-  { href: "/admin/customers", label: "Customers", icon: "👥", adminOnly: false },
-  { href: "/admin/analytics", label: "Analytics", icon: "📈", adminOnly: true },
-  { href: "/admin/products", label: "Products", icon: "🔥", adminOnly: false },
-  { href: "/admin/staff", label: "Staff", icon: "👩‍💼", adminOnly: true },
-  { href: "/admin/emails", label: "Emails", icon: "📧", adminOnly: true },
-  { href: "/admin/delivery", label: "Delivery", icon: "🚚", adminOnly: true },
-  { href: "/admin/homepage", label: "Homepage", icon: "🎨", adminOnly: true },
-  { href: "/admin/settings", label: "Settings", icon: "⚙️", adminOnly: true },
+  { href: "/admin/leads", label: "Overview", icon: "🏠", adminOnly: false },
+  { href: "/admin/leads/orders", label: "Orders", icon: "📦", adminOnly: false },
+  { href: "/admin/leads/enquiries", label: "Enquiries", icon: "💬", adminOnly: false },
+  { href: "/admin/leads/customers", label: "Customers", icon: "👥", adminOnly: false },
+  { href: "/admin/leads/analytics", label: "Analytics", icon: "📈", adminOnly: true },
+  { href: "/admin/leads/staff", label: "Staff", icon: "👩‍💼", adminOnly: true },
+  { href: "/admin", label: "← Back to Admin", icon: "🔙", adminOnly: false },
 ];
 
 export default function AdminSidebar() {

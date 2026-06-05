@@ -38,7 +38,7 @@ function AdminGate(props: { children: React.ReactNode }) {
   );
 }
 
-export default function AdminLayout(props: { children: React.ReactNode }) {
+export default function LeadsLayout(props: { children: React.ReactNode }) {
   return (
     <AuthProvider>
       <AdminGate>{props.children}</AdminGate>

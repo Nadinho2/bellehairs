@@ -1,375 +1,592 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { useAdminAuth } from "@/components/admin/AuthProvider";
-import {
-  StatusBadge, SourceBadge, AdminPageHeader, EmptyState, LoadingSkeleton, ConfirmModal,
-} from "@/components/admin/ui";
-import type { OrderRow, ProfileRow } from "@/lib/supabase/types";
 
-function fmtNaira(n: number) { return `₦${n.toLocaleString("en-NG")}`; }
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+import { formatPrice } from "@/lib/format";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { OrderEmailEventRow, OrderRow, OrderStatus, OrderStatusHistoryEntry } from "@/lib/supabase/types";
+
+function toWhatsAppNumber(input: string) {
+  const digits = (input ?? "").replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.startsWith("234")) return digits;
+  if (digits.startsWith("0") && digits.length === 11) return `234${digits.slice(1)}`;
+  if (digits.length === 10) return `234${digits}`;
+  return digits;
 }
 
-const STATUSES = ["order_received", "payment_received", "order_confirmed", "dispatched", "delivered"] as const;
-const STATUS_LABELS: Record<string, string> = {
-  order_received: "🟡 Order Received",
-  payment_received: "🔵 Payment Received",
-  order_confirmed: "🟣 Confirmed",
-  dispatched: "🟠 Dispatched",
-  delivered: "🟢 Delivered",
-};
+function statusLabel(status: OrderStatus) {
+  switch (status) {
+    case "order_received":
+      return "Order Received";
+    case "payment_received":
+      return "Payment Received";
+    case "order_confirmed":
+      return "Order Confirmed";
+    case "dispatched":
+      return "Dispatched";
+    case "delivered":
+      return "Delivered";
+    case "cancelled":
+      return "Cancelled";
+  }
+}
 
-export default function OrdersPage() {
-  const { profile } = useAdminAuth();
+function normalizeStatus(raw: string): OrderStatus {
+  if (raw === "pending") return "order_received";
+  if (raw === "confirmed") return "order_confirmed";
+  if (raw === "delivered") return "delivered";
+  if (
+    raw === "order_received" ||
+    raw === "payment_received" ||
+    raw === "order_confirmed" ||
+    raw === "dispatched" ||
+    raw === "cancelled"
+  ) {
+    return raw;
+  }
+  return "order_received";
+}
+
+function statusBadge(status: OrderStatus) {
+  switch (status) {
+    case "order_received":
+      return { label: "🟡 Order Received", className: "bg-yellow-500/20 text-yellow-200 border-yellow-500/30" };
+    case "payment_received":
+      return { label: "🔵 Payment Received", className: "bg-blue-500/20 text-blue-200 border-blue-500/30" };
+    case "order_confirmed":
+      return { label: "🟣 Order Confirmed", className: "bg-purple-500/20 text-purple-200 border-purple-500/30" };
+    case "dispatched":
+      return { label: "🟠 Dispatched", className: "bg-orange-500/20 text-orange-200 border-orange-500/30" };
+    case "delivered":
+      return { label: "🟢 Delivered", className: "bg-green-500/20 text-green-200 border-green-500/30" };
+    case "cancelled":
+      return { label: "🔴 Cancelled", className: "bg-red-500/20 text-red-200 border-red-500/30" };
+  }
+}
+
+function formatHistoryLine(e: OrderStatusHistoryEntry) {
+  const at = e.at ? new Date(e.at) : null;
+  const time = at ? at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+  const date = at ? at.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : "";
+  const fromLabel = e.from ? statusLabel(e.from) : "—";
+  return `${fromLabel} → ${statusLabel(e.to)}${time && date ? ` at ${time} on ${date}` : ""}`;
+}
+
+type ReminderCode = "R1" | "R2" | "R3" | "R4" | "R5";
+
+function reminderTemplateKey(code: ReminderCode) {
+  if (code === "R1") return "payment_reminder_r1";
+  if (code === "R2") return "payment_reminder_r2";
+  if (code === "R3") return "payment_reminder_r3";
+  if (code === "R4") return "payment_reminder_r4";
+  return "payment_reminder_r5";
+}
+
+function reminderLabel(code: ReminderCode) {
+  if (code === "R1") return "Reminder 1";
+  if (code === "R2") return "Reminder 2";
+  if (code === "R3") return "Reminder 3";
+  if (code === "R4") return "Reminder 4";
+  return "Reminder 5";
+}
+
+function formatDateTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleString("en-NG", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function offerSummary(offerRaw: unknown) {
+  const offer = offerRaw && typeof offerRaw === "object" ? (offerRaw as Record<string, unknown>) : {};
+  const parts: string[] = [];
+  if (offer.free_delivery) parts.push("Free delivery");
+  if (offer.free_wig_cap) parts.push("Free wig cap");
+  const code = typeof offer.discount_code === "string" ? offer.discount_code.trim() : "";
+  const pct = Number(offer.discount_percent ?? 0);
+  if (code && Number.isFinite(pct) && pct > 0) parts.push(`${Math.round(pct)}% off (${code})`);
+  else if (code) parts.push(`Discount (${code})`);
+  return parts.join(" • ");
+}
+
+export default function AdminOrdersPage() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-  const searchParams = useSearchParams();
-  const highlightId = searchParams.get("id");
-
   const [orders, setOrders] = useState<OrderRow[]>([]);
-  const [staff, setStaff] = useState<ProfileRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<"kanban" | "table">("kanban");
-  const [search, setSearch] = useState("");
-  const [filterSource, setFilterSource] = useState("");
-  const [filterStatus, setFilterStatus] = useState("");
-  const [selectedOrder, setSelectedOrder] = useState<OrderRow | null>(null);
-  const [confirmMove, setConfirmMove] = useState<{ order: OrderRow; newStatus: string } | null>(null);
-  const [notes, setNotes] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const [emailEvents, setEmailEvents] = useState<OrderEmailEventRow[]>([]);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [eventsLoading, setEventsLoading] = useState(false);
+
+  const [reminderModalOrderId, setReminderModalOrderId] = useState<string | null>(null);
+  const [selectedReminder, setSelectedReminder] = useState<ReminderCode | "">("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [preview, setPreview] = useState<{
+    alreadySent: boolean;
+    subject: string;
+    html: string;
+    existingEvent: OrderEmailEventRow | null;
+  } | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+
+  const loadAll = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
-      const [oRes, sRes] = await Promise.all([
-        supabase.from("orders").select("*").order("created_at", { ascending: false }).limit(500),
-        supabase.from("profiles").select("*"),
-      ]);
-      setOrders((oRes.data ?? []) as OrderRow[]);
-      setStaff((sRes.data ?? []) as ProfileRow[]);
+      const { data, error: e } = await supabase
+        .from("orders")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (e) throw e;
+      setOrders((data ?? []) as OrderRow[]);
+    } catch (err) {
+      setError((err as Error).message || "Failed to load orders.");
     } finally {
       setLoading(false);
     }
   }, [supabase]);
 
-  useEffect(() => { void load(); }, [load]);
-
-  useEffect(() => {
-    const ch = supabase
-      .channel("orders-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => void load())
-      .subscribe();
-    return () => { void supabase.removeChannel(ch); };
-  }, [supabase, load]);
-
-  // Auto-open order from URL
-  useEffect(() => {
-    if (highlightId && orders.length > 0) {
-      const found = orders.find((o) => o.id === highlightId);
-      if (found) { setSelectedOrder(found); setNotes(found.internal_notes || ""); }
+  const loadEmailEvents = useCallback(async (orderIds: string[]) => {
+    const ids = Array.from(new Set(orderIds.map((x) => String(x).trim()).filter(Boolean))).slice(0, 200);
+    if (!ids.length) {
+      setEmailEvents([]);
+      return;
     }
-  }, [highlightId, orders]);
+    setEventsLoading(true);
+    setEventsError(null);
+    try {
+      const res = await fetch(`/api/admin/order-email-events?ids=${encodeURIComponent(ids.join(","))}`, { method: "GET" });
+      const json = (await res.json()) as { ok?: boolean; events?: OrderEmailEventRow[]; error?: string };
+      if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load order email events.");
+      setEmailEvents(json.events ?? []);
+    } catch (err) {
+      setEmailEvents([]);
+      setEventsError((err as Error).message || "Failed to load order email events.");
+    } finally {
+      setEventsLoading(false);
+    }
+  }, []);
 
-  const filtered = useMemo(() => {
-    return orders.filter((o) => {
-      if (search) {
-        const q = search.toLowerCase();
-        if (!o.customer_name?.toLowerCase().includes(q) && !o.customer_phone?.includes(q) && !(o.order_id_display || "").toLowerCase().includes(q)) return false;
-      }
-      if (filterSource && o.source !== filterSource) return false;
-      if (filterStatus && o.status !== filterStatus) return false;
-      if (profile?.role === "staff" && o.assigned_to && o.assigned_to !== profile.id) return false;
-      return true;
-    });
-  }, [orders, search, filterSource, filterStatus, profile]);
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      void loadAll();
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [loadAll]);
 
-  const byStatus = useMemo(() => {
-    const map: Record<string, OrderRow[]> = {};
-    for (const s of STATUSES) map[s] = [];
-    for (const o of filtered) {
-      if (map[o.status]) map[o.status].push(o);
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      void loadEmailEvents(orders.map((o) => o.id));
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [loadEmailEvents, orders]);
+
+  const eventsByOrderId = useMemo(() => {
+    const map = new Map<string, OrderEmailEventRow[]>();
+    for (const e of emailEvents) {
+      const id = String(e.order_id ?? "");
+      if (!id) continue;
+      map.set(id, [...(map.get(id) ?? []), e]);
+    }
+    for (const [k, v] of map.entries()) {
+      v.sort((a, b) => String(b.sent_at ?? "").localeCompare(String(a.sent_at ?? "")));
+      map.set(k, v);
     }
     return map;
-  }, [filtered]);
-
-  async function updateStatus(orderId: string, newStatus: string) {
-    const order = orders.find((o) => o.id === orderId);
-    if (!order) return;
-    const historyEntry = { from: order.status, to: newStatus, at: new Date().toISOString() };
-    const existing = Array.isArray(order.status_history) ? order.status_history : [];
-    await supabase.from("orders").update({
-      status: newStatus,
-      status_history: [...existing, historyEntry],
-    }).eq("id", orderId);
-    // Log activity
-    await supabase.from("staff_activity_log").insert({
-      staff_id: profile?.id,
-      staff_name: profile?.full_name,
-      action: `Changed status to ${newStatus}`,
-      entity_type: "order",
-      entity_id: orderId,
-      details: `${order.order_id_display || orderId.slice(0, 8)}: ${order.status} → ${newStatus}`,
-    });
-    void load();
-  }
-
-  async function assignOrder(orderId: string, staffId: string | null) {
-    await supabase.from("orders").update({ assigned_to: staffId }).eq("id", orderId);
-    void load();
-  }
-
-  async function saveNotes(orderId: string, noteText: string) {
-    await supabase.from("orders").update({ internal_notes: noteText }).eq("id", orderId);
-    await supabase.from("staff_activity_log").insert({
-      staff_id: profile?.id,
-      staff_name: profile?.full_name,
-      action: "Updated notes",
-      entity_type: "order",
-      entity_id: orderId,
-    });
-  }
-
-  const staffById = useMemo(() => new Map(staff.map((s) => [s.id, s])), [staff]);
+  }, [emailEvents]);
 
   if (loading) {
-    return <div className="px-4 lg:px-8 py-6"><AdminPageHeader title="Orders" /><LoadingSkeleton rows={10} /></div>;
+    return (
+      <div className="mx-auto w-full max-w-6xl px-4 py-12">
+        <div className="rounded-3xl border border-border bg-card p-10 text-white">
+          <p className="text-sm text-white/70">Loading orders…</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="px-4 lg:px-8 py-6 space-y-4">
-      <AdminPageHeader
-        title="Orders"
-        subtitle={`${orders.length} total orders`}
-        actions={
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setView("kanban")} className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${view === "kanban" ? "bg-brand text-white" : "border border-border text-white/60 hover:text-white"}`}>Kanban</button>
-            <button type="button" onClick={() => setView("table")} className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${view === "table" ? "bg-brand text-white" : "border border-border text-white/60 hover:text-white"}`}>Table</button>
-          </div>
-        }
-      />
-
-      {/* Filters */}
-      <div className="flex flex-wrap gap-2">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name, phone, order ID…"
-          className="h-9 rounded-xl border border-border bg-card px-3 text-xs text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-brand/40 w-60"
-        />
-        <select value={filterSource} onChange={(e) => setFilterSource(e.target.value)} className="h-9 rounded-xl border border-border bg-card px-3 text-xs text-white">
-          <option value="">All Sources</option>
-          <option value="website">Website</option>
-          <option value="whatsapp_bot">WhatsApp Bot</option>
-        </select>
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="h-9 rounded-xl border border-border bg-card px-3 text-xs text-white">
-          <option value="">All Statuses</option>
-          {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-        </select>
+    <div className="mx-auto w-full max-w-6xl px-4 py-12">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-brand">Admin</p>
+          <h1 className="text-4xl font-semibold tracking-tight text-foreground">Orders</h1>
+          <p className="text-sm text-foreground/70">View and update customer order status.</p>
+          {error ? <p className="text-sm font-semibold text-brand">{error}</p> : null}
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => loadAll()}
+            className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
+          >
+            Refresh
+          </button>
+          <Link
+            href="/admin/email-templates"
+            className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
+          >
+            Email Templates
+          </Link>
+          <Link
+            href="/admin"
+            className="inline-flex items-center justify-center rounded-full border border-black bg-white px-5 py-2 text-sm font-semibold text-black hover:border-brand"
+          >
+            Back to admin
+          </Link>
+        </div>
       </div>
 
-      {/* Kanban View */}
-      {view === "kanban" ? (
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {STATUSES.map((status) => (
-            <div key={status} className="min-w-[280px] flex-1">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-xs font-semibold text-white">{STATUS_LABELS[status]}</span>
-                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/50">{byStatus[status]?.length || 0}</span>
-              </div>
-              <div className="space-y-2">
-                {(byStatus[status] || []).map((o) => (
-                  <div
-                    key={o.id}
-                    onClick={() => { setSelectedOrder(o); setNotes(o.internal_notes || ""); }}
-                    className={`cursor-pointer rounded-xl border p-3 transition hover:border-brand/40 ${
-                      o.id === highlightId ? "border-brand bg-brand/5" : "border-border bg-card"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-mono text-brand">{o.order_id_display || o.id.slice(0, 8)}</span>
-                      <SourceBadge source={o.source} />
-                    </div>
-                    <p className="mt-1.5 text-sm font-medium text-white">{o.customer_name}</p>
-                    <p className="text-xs text-white/50">{o.customer_phone}</p>
-                    <p className="mt-1 text-sm font-bold text-white">{fmtNaira(o.total_amount || 0)}</p>
-                    <div className="mt-2 flex items-center justify-between">
-                      <span className="text-[10px] text-white/30">{timeAgo(o.created_at)}</span>
-                      {o.assigned_to ? (
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand/20 text-[9px] text-brand font-bold">
-                          {staffById.get(o.assigned_to)?.full_name?.charAt(0) || "?"}
-                        </span>
-                      ) : null}
-                    </div>
+      <div className="mt-8 space-y-5">
+        {orders.length === 0 ? (
+          <div className="rounded-3xl border border-border bg-card p-10 text-center text-white">
+            <p className="text-sm text-white/70">No orders yet.</p>
+          </div>
+        ) : (
+          orders.map((o) => (
+            <div key={o.id} className="rounded-3xl border border-border bg-card p-6 text-white">
+              {(() => {
+                const currentStatus = normalizeStatus(String(o.status));
+                const orderEvents = eventsByOrderId.get(o.id) ?? [];
+                const reminderEvents = orderEvents.filter((e) => String(e.kind) === "payment_reminder");
+                const reminderByCode = new Map<ReminderCode, OrderEmailEventRow>();
+                for (const e of reminderEvents) {
+                  const code = String(e.reminder_code ?? "") as ReminderCode;
+                  if (code === "R1" || code === "R2" || code === "R3" || code === "R4" || code === "R5") {
+                    if (!reminderByCode.has(code)) reminderByCode.set(code, e);
+                  }
+                }
+                const trackerLine = (["R1", "R2", "R3", "R4", "R5"] as const)
+                  .map((code) => `${reminderByCode.has(code) ? "✅" : "⬜"} ${reminderLabel(code)}`)
+                  .join(" • ");
+                return (
+                  <>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-brand">Order</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <p className="truncate text-sm font-semibold text-white">{o.id}</p>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${statusBadge(currentStatus).className}`}
+                    >
+                      {statusBadge(currentStatus).label}
+                    </span>
                   </div>
-                ))}
-                {(byStatus[status] || []).length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border p-4 text-center text-xs text-white/30">Empty</div>
-                ) : null}
+                  <p className="mt-2 text-sm text-white/70">
+                    {o.customer_name} • {o.customer_phone} • {o.customer_email}
+                  </p>
+                  <p className="mt-1 text-sm text-white/70">
+                    {o.delivery_method === "PICKUP_OWERRI"
+                      ? "Pickup (Owerri)"
+                      : `${o.delivery_address ?? ""}${o.city ? `, ${o.city}` : ""}${
+                          o.state ? `, ${o.state}` : ""
+                        }`}
+                  </p>
+                  {o.order_note ? (
+                    <p className="mt-2 text-sm text-white/70">Note: {o.order_note}</p>
+                  ) : null}
+                  <p className="mt-2 text-sm font-semibold text-white">
+                    Total: {formatPrice(Number(o.total_amount ?? 0))}
+                    {Number(o.delivery_fee ?? 0) > 0
+                      ? ` (Delivery: ${formatPrice(Number(o.delivery_fee ?? 0))})`
+                      : ""}
+                  </p>
+                  <p className="mt-2 text-xs text-white/50">
+                    {o.created_at ? new Date(o.created_at).toLocaleString() : ""}
+                  </p>
+                  <div className="mt-3 rounded-2xl border border-white/10 bg-black/40 p-4">
+                    <p className="text-xs font-semibold text-white/70">Payment reminders</p>
+                    <p className="mt-1 text-sm font-semibold text-white">{trackerLine}</p>
+                    {eventsError ? <p className="mt-2 text-xs text-white/70">{eventsError}</p> : null}
+                    {eventsLoading ? <p className="mt-2 text-xs text-white/70">Loading reminder log…</p> : null}
+                    {reminderEvents.length ? (
+                      <div className="mt-3 space-y-2 text-xs text-white/70">
+                        {reminderEvents
+                          .slice()
+                          .sort((a, b) => String(a.sent_at ?? "").localeCompare(String(b.sent_at ?? "")))
+                          .map((e) => (
+                            <p key={e.id}>
+                              {reminderLabel(String(e.reminder_code ?? "") as ReminderCode)} sent {e.sent_at ? `on ${formatDateTime(e.sent_at)}` : ""}{" "}
+                              {e.sent_by_email ? `by ${e.sent_by_email}` : ""}
+                              {offerSummary(e.offer) ? ` • Offer: ${offerSummary(e.offer)}` : ""}
+                            </p>
+                          ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs text-white/70">No reminders sent yet.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <select
+                    value={currentStatus}
+                    onChange={async (e) => {
+                      const next = e.target.value as OrderStatus;
+                      const ok = window.confirm(
+                        `Change status to ${statusLabel(next)}? This will send an email to the customer.`,
+                      );
+                      if (!ok) return;
+                      setSavingId(o.id);
+                      try {
+                        const res = await fetch("/api/admin/orders", {
+                          method: "PATCH",
+                          headers: { "content-type": "application/json" },
+                          body: JSON.stringify({ id: o.id, status: next }),
+                        });
+                        const json = (await res.json()) as {
+                          ok?: boolean;
+                          error?: string;
+                          emailSent?: boolean;
+                          historyLogged?: boolean;
+                        };
+                        if (!res.ok || !json.ok) throw new Error(json.error || "Failed to update status.");
+                        if (json.emailSent === false) {
+                          window.alert("Status updated, but the email failed to send. Please try again.");
+                        }
+                        if (json.historyLogged === false) {
+                          window.alert(
+                            'Status updated, but history could not be saved. Add a "status_history" jsonb column to the orders table to enable history.',
+                          );
+                        }
+                        await loadAll();
+                      } catch (err) {
+                        alert((err as Error).message || "Failed to update status.");
+                      } finally {
+                        setSavingId(null);
+                      }
+                    }}
+                    disabled={savingId === o.id}
+                    className="h-10 rounded-full border border-white/15 bg-black/40 px-4 text-sm font-semibold text-white outline-none focus:ring-2 focus:ring-brand/40 disabled:opacity-60"
+                    aria-label="Order status"
+                  >
+                    <option value="order_received">🟡 Order Received</option>
+                    <option value="payment_received">🔵 Payment Received</option>
+                    <option value="order_confirmed">🟣 Order Confirmed</option>
+                    <option value="dispatched">🟠 Dispatched</option>
+                    <option value="delivered">🟢 Delivered</option>
+                    <option value="cancelled">🔴 Cancelled</option>
+                  </select>
+                  <a
+                    href={`https://wa.me/${toWhatsAppNumber(o.customer_phone) ?? ""}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center justify-center rounded-full bg-[#25D366] px-5 py-2 text-sm font-semibold text-white hover:brightness-95"
+                  >
+                    WhatsApp
+                  </a>
+                  {currentStatus === "order_received" ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={savingId === o.id}
+                        onClick={() => {
+                          setReminderModalOrderId(o.id);
+                          setSelectedReminder("");
+                          setPreview(null);
+                          setSendError(null);
+                        }}
+                        className="inline-flex items-center justify-center rounded-full border border-white/20 bg-black px-5 py-2 text-sm font-semibold text-white hover:border-brand/60 disabled:opacity-60"
+                      >
+                        Send Payment Reminder
+                      </button>
+                    </>
+                  ) : null}
+                </div>
               </div>
+
+              <details className="mt-4 rounded-2xl border border-white/10 bg-black/40 px-5 py-4">
+                <summary className="cursor-pointer text-sm font-semibold text-white">
+                  Status history
+                </summary>
+                {Array.isArray(o.status_history) && o.status_history.length ? (
+                  <div className="mt-4 space-y-2 text-sm text-white/70">
+                    {(o.status_history as OrderStatusHistoryEntry[]).map((h, idx) => (
+                      <p key={`${h.at}-${idx}`}>{formatHistoryLine(h)}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-white/70">No history logged yet.</p>
+                )}
+              </details>
+
+              <details className="mt-5 rounded-2xl border border-white/10 bg-black/40 px-5 py-4">
+                <summary className="cursor-pointer text-sm font-semibold text-white">
+                  View items JSON
+                </summary>
+                <pre className="mt-4 overflow-x-auto text-xs text-white/70">
+                  {JSON.stringify(o.items ?? null, null, 2)}
+                </pre>
+              </details>
+                  </>
+                );
+              })()}
             </div>
-          ))}
-        </div>
-      ) : null}
+          ))
+        )}
+      </div>
 
-      {/* Table View */}
-      {view === "table" ? (
-        <div className="overflow-x-auto rounded-2xl border border-border bg-card">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                {["ID", "Customer", "Phone", "Total", "Source", "Status", "Assigned", "Date", "Actions"].map((h) => (
-                  <th key={h} className="px-3 py-2.5 text-[10px] font-semibold text-white/40 uppercase">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filtered.map((o) => (
-                <tr key={o.id} className="hover:bg-white/5 transition">
-                  <td className="px-3 py-2 text-xs font-mono text-brand">{o.order_id_display || o.id.slice(0, 8)}</td>
-                  <td className="px-3 py-2 text-xs text-white">{o.customer_name}</td>
-                  <td className="px-3 py-2 text-xs text-white/60">{o.customer_phone}</td>
-                  <td className="px-3 py-2 text-xs font-medium text-white">{fmtNaira(o.total_amount || 0)}</td>
-                  <td className="px-3 py-2"><SourceBadge source={o.source} /></td>
-                  <td className="px-3 py-2"><StatusBadge status={o.status} /></td>
-                  <td className="px-3 py-2 text-xs text-white/60">{o.assigned_to ? staffById.get(o.assigned_to)?.full_name || "—" : "Unassigned"}</td>
-                  <td className="px-3 py-2 text-xs text-white/40">{timeAgo(o.created_at)}</td>
-                  <td className="px-3 py-2">
-                    <button type="button" onClick={() => { setSelectedOrder(o); setNotes(o.internal_notes || ""); }} className="text-xs text-brand hover:underline">View</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-
-      {/* Order Detail Panel */}
-      {selectedOrder ? (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/60" onClick={() => setSelectedOrder(null)}>
-          <div className="w-full max-w-lg h-full overflow-y-auto bg-card border-l border-border p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-white">{selectedOrder.order_id_display || selectedOrder.id.slice(0, 8)}</h2>
-              <button type="button" onClick={() => setSelectedOrder(null)} className="text-white/50 hover:text-white text-xl">×</button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <p className="text-xs text-white/40 mb-1">Customer</p>
-                <p className="text-sm text-white font-medium">{selectedOrder.customer_name}</p>
-                <p className="text-xs text-white/60">{selectedOrder.customer_phone} · {selectedOrder.customer_email}</p>
-                {selectedOrder.delivery_address ? <p className="text-xs text-white/60 mt-1">{selectedOrder.delivery_address}</p> : null}
-              </div>
-
-              <div>
-                <p className="text-xs text-white/40 mb-1">Items</p>
-                <div className="space-y-1">
-                  {Array.isArray(selectedOrder.items) ? (selectedOrder.items as Array<Record<string, unknown>>).map((item, i) => (
-                    <div key={i} className="flex justify-between text-xs">
-                      <span className="text-white">{String(item.name || "Item")} × {String(item.quantity || 1)}</span>
-                      <span className="text-white/60">{fmtNaira(Number(item.price || 0))}</span>
+      {reminderModalOrderId ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-5xl rounded-3xl border border-white/10 bg-[#0b0b0e] p-6 text-white">
+            {(() => {
+              const order = orders.find((o) => o.id === reminderModalOrderId) ?? null;
+              return (
+                <>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-brand">Send Payment Reminder</p>
+                      <p className="truncate text-sm font-semibold text-white">
+                        {order?.customer_name ?? ""} • {order?.customer_email ?? ""}
+                      </p>
+                      <p className="truncate text-xs text-white/60">Order: {order?.id ?? ""}</p>
                     </div>
-                  )) : <p className="text-xs text-white/40">No items</p>}
-                </div>
-                <div className="mt-2 border-t border-border pt-2 flex justify-between text-sm font-bold text-white">
-                  <span>Total</span>
-                  <span>{fmtNaira(selectedOrder.total_amount || 0)}</span>
-                </div>
-              </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReminderModalOrderId(null);
+                        setSelectedReminder("");
+                        setPreview(null);
+                        setSendError(null);
+                      }}
+                      className="rounded-full border border-white/15 bg-black px-4 py-2 text-xs font-semibold text-white hover:border-brand/60"
+                    >
+                      Close
+                    </button>
+                  </div>
 
-              <div>
-                <p className="text-xs text-white/40 mb-1">Status</p>
-                <StatusBadge status={selectedOrder.status} />
-                <SourceBadge source={selectedOrder.source} />
-              </div>
+                  <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <select
+                      value={selectedReminder}
+                      onChange={async (e) => {
+                        const next = e.target.value as ReminderCode | "";
+                        setSelectedReminder(next);
+                        setPreview(null);
+                        setSendError(null);
+                        if (!order || !next) return;
+                        setPreviewLoading(true);
+                        try {
+                          const res = await fetch("/api/admin/order-emails", {
+                            method: "POST",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({
+                              action: "preview",
+                              orderId: order.id,
+                              templateKey: reminderTemplateKey(next),
+                            }),
+                          });
+                          const json = (await res.json()) as {
+                            ok?: boolean;
+                            error?: string;
+                            alreadySent?: boolean;
+                            subject?: string;
+                            html?: string;
+                            existingEvent?: OrderEmailEventRow | null;
+                          };
+                          if (!res.ok || !json.ok) throw new Error(json.error || "Failed to load preview.");
+                          setPreview({
+                            alreadySent: Boolean(json.alreadySent),
+                            subject: String(json.subject ?? ""),
+                            html: String(json.html ?? ""),
+                            existingEvent: (json.existingEvent ?? null) as OrderEmailEventRow | null,
+                          });
+                        } catch (err) {
+                          setSendError((err as Error).message || "Failed to load preview.");
+                        } finally {
+                          setPreviewLoading(false);
+                        }
+                      }}
+                      className="h-11 w-full rounded-2xl border border-white/15 bg-black/40 px-4 text-sm font-semibold text-white outline-none focus:ring-2 focus:ring-brand/40 sm:max-w-sm"
+                      aria-label="Reminder template"
+                    >
+                      <option value="">Select a reminder…</option>
+                      <option value="R1">Reminder 1 — Gentle Nudge</option>
+                      <option value="R2">Reminder 2 — Urgency</option>
+                      <option value="R3">Reminder 3 — Free Delivery Offer</option>
+                      <option value="R4">Reminder 4 — Discount</option>
+                      <option value="R5">Reminder 5 — Last Chance + Free Wig Cap</option>
+                    </select>
 
-              {/* Status History */}
-              <div>
-                <p className="text-xs text-white/40 mb-2">Status Timeline</p>
-                <div className="space-y-2">
-                  {Array.isArray(selectedOrder.status_history) ? (selectedOrder.status_history as Array<Record<string, unknown>>).map((entry, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs">
-                      <span className="text-green-400">✓</span>
-                      <span className="text-white/60">{String(entry.from || "start")} → {String(entry.to)}</span>
-                      <span className="text-white/30 ml-auto">{new Date(String(entry.at)).toLocaleString("en-NG")}</span>
-                    </div>
-                  )) : <p className="text-xs text-white/30">No history</p>}
-                </div>
-              </div>
+                    <button
+                      type="button"
+                      disabled={!order || !selectedReminder || previewLoading || savingId === order?.id || preview?.alreadySent}
+                      onClick={async () => {
+                        if (!order || !selectedReminder) return;
+                        const ok = window.confirm("Send this reminder now? The email will be sent immediately.");
+                        if (!ok) return;
+                        setSavingId(order.id);
+                        setSendError(null);
+                        try {
+                          const res = await fetch("/api/admin/order-emails", {
+                            method: "POST",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({
+                              action: "send",
+                              orderId: order.id,
+                              templateKey: reminderTemplateKey(selectedReminder),
+                            }),
+                          });
+                          const json = (await res.json()) as { ok?: boolean; error?: string };
+                          if (!res.ok || !json.ok) throw new Error(json.error || "Failed to send reminder.");
+                          await loadEmailEvents(orders.map((o) => o.id));
+                          setReminderModalOrderId(null);
+                          setSelectedReminder("");
+                          setPreview(null);
+                        } catch (err) {
+                          setSendError((err as Error).message || "Failed to send reminder.");
+                        } finally {
+                          setSavingId(null);
+                        }
+                      }}
+                      className="inline-flex h-11 items-center justify-center rounded-2xl bg-brand px-5 text-sm font-semibold text-white transition hover:bg-[#C2177A] disabled:opacity-60"
+                    >
+                      Send
+                    </button>
+                  </div>
 
-              {/* Assign */}
-              <div>
-                <p className="text-xs text-white/40 mb-1">Assign to</p>
-                <select
-                  value={selectedOrder.assigned_to || ""}
-                  onChange={(e) => assignOrder(selectedOrder.id, e.target.value || null)}
-                  className="h-9 w-full rounded-xl border border-border bg-black/40 px-3 text-xs text-white"
-                >
-                  <option value="">Unassigned</option>
-                  {staff.map((s) => <option key={s.id} value={s.id}>{s.full_name} ({s.role})</option>)}
-                </select>
-              </div>
+                  {preview?.alreadySent ? (
+                    <p className="mt-3 text-sm text-white/70">
+                      This reminder was already sent{preview.existingEvent?.sent_at ? ` on ${formatDateTime(preview.existingEvent.sent_at)}` : ""}.
+                    </p>
+                  ) : null}
+                  {sendError ? <p className="mt-3 text-sm font-semibold text-brand">{sendError}</p> : null}
 
-              {/* Status Change */}
-              <div>
-                <p className="text-xs text-white/40 mb-1">Change Status</p>
-                <select
-                  value={selectedOrder.status}
-                  onChange={(e) => setConfirmMove({ order: selectedOrder, newStatus: e.target.value })}
-                  className="h-9 w-full rounded-xl border border-border bg-black/40 px-3 text-xs text-white"
-                >
-                  {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
-                </select>
-              </div>
+                  <div className="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-white">
+                    {previewLoading ? (
+                      <div className="p-6">
+                        <p className="text-sm text-black/70">Loading preview…</p>
+                      </div>
+                    ) : preview?.html ? (
+                      <iframe title="Email preview" className="h-[70vh] w-full" srcDoc={preview.html} />
+                    ) : (
+                      <div className="p-6">
+                        <p className="text-sm text-black/70">Select a reminder to preview.</p>
+                      </div>
+                    )}
+                  </div>
 
-              {/* Notes */}
-              <div>
-                <p className="text-xs text-white/40 mb-1">Internal Notes</p>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  onBlur={() => saveNotes(selectedOrder.id, notes)}
-                  rows={3}
-                  className="w-full rounded-xl border border-border bg-black/40 p-3 text-xs text-white placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-brand/40"
-                  placeholder="Add notes about this order…"
-                />
-              </div>
-
-              {/* WhatsApp */}
-              <a
-                href={`https://wa.me/${(selectedOrder.whatsapp_number || selectedOrder.customer_phone || "").replace(/^0/, "234").replace(/[^0-9]/g, "")}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white hover:brightness-95 transition"
-              >
-                💬 Open WhatsApp
-              </a>
-            </div>
+                  {preview?.subject ? (
+                    <p className="mt-3 text-xs text-white/60">
+                      Subject: <span className="font-semibold text-white/80">{preview.subject}</span>
+                    </p>
+                  ) : null}
+                </>
+              );
+            })()}
           </div>
         </div>
       ) : null}
-
-      {/* Confirm Status Change */}
-      <ConfirmModal
-        open={!!confirmMove}
-        title="Change Order Status"
-        message={confirmMove ? `Move ${confirmMove.order.order_id_display || confirmMove.order.id.slice(0, 8)} to "${STATUS_LABELS[confirmMove.newStatus] || confirmMove.newStatus}"?` : ""}
-        onConfirm={() => {
-          if (confirmMove) {
-            updateStatus(confirmMove.order.id, confirmMove.newStatus);
-            setSelectedOrder((prev) => prev && prev.id === confirmMove.order.id ? { ...prev, status: confirmMove.newStatus as OrderRow["status"] } : prev);
-            setConfirmMove(null);
-          }
-        }}
-        onCancel={() => setConfirmMove(null)}
-      />
     </div>
   );
 }
