@@ -19,10 +19,13 @@ function LoginInner() {
   return (
     <div className="mx-auto w-full max-w-md px-4 py-12">
       <div className="rounded-3xl border border-border bg-card p-8 text-white">
-        <p className="text-xs font-semibold text-brand">Admin</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">Login</h1>
-        <p className="mt-2 text-sm text-white/70">
-          Sign in with your admin email and password.
+        <div className="flex flex-col items-center gap-3 mb-6">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-white text-xl font-bold">BH</div>
+          <h1 className="text-2xl font-bold text-white">Belle Hairs</h1>
+          <p className="text-sm text-white/50">Admin Dashboard</p>
+        </div>
+        <p className="text-sm text-white/70 text-center">
+          Sign in with your email and password.
         </p>
 
         <form

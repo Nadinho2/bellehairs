@@ -114,10 +114,13 @@ export type ReviewRow = {
 
 export type OrderRow = {
   id: string;
+  order_id_display: string | null;
+  source: string;
   customer_name: string;
   customer_email: string;
   customer_phone: string;
   customer_phone_2: string | null;
+  whatsapp_number: string | null;
   delivery_address: string | null;
   state: string | null;
   city: string | null;
@@ -127,6 +130,11 @@ export type OrderRow = {
   items: unknown;
   total_amount: number | null;
   status: OrderStatus;
+  assigned_to: string | null;
+  internal_notes: string | null;
+  reminders_sent: string[] | null;
+  reminder_stopped: boolean | null;
+  bot_session_id: string | null;
   status_history?: OrderStatusHistoryEntry[] | null;
   created_at: string;
 };
@@ -159,4 +167,65 @@ export type OrderRowInsert = {
   items: unknown;
   total_amount: number;
   status: OrderStatus;
+};
+
+// ============================================================
+// Lead & Order Management Dashboard Types
+// ============================================================
+
+export type ProfileRow = {
+  id: string;
+  full_name: string;
+  role: "admin" | "staff";
+  created_at: string;
+};
+
+export type LeadRow = {
+  id: string;
+  whatsapp_number: string;
+  customer_name: string | null;
+  enquiry_about: string | null;
+  last_message: string | null;
+  last_message_at: string | null;
+  follow_up_status: "not_contacted" | "in_conversation" | "converted";
+  assigned_to: string | null;
+  converted_order_id: string | null;
+  notes: string | null;
+  source: string;
+  created_at: string;
+};
+
+export type CustomerRow = {
+  id: string;
+  full_name: string;
+  phone: string | null;
+  whatsapp_number: string | null;
+  email: string | null;
+  state: string | null;
+  total_orders: number;
+  total_spent: number;
+  last_order_date: string | null;
+  tag: "vip" | "regular" | "first_timer" | "cold_lead";
+  notes: string | null;
+  created_at: string;
+};
+
+export type StaffActivityLogRow = {
+  id: string;
+  staff_id: string | null;
+  staff_name: string | null;
+  action: string;
+  entity_type: "order" | "lead" | "customer" | null;
+  entity_id: string | null;
+  details: string | null;
+  created_at: string;
+};
+
+export type ProductEnquiryRow = {
+  id: string;
+  product_name: string;
+  product_id: string | null;
+  enquiry_count: number;
+  order_count: number;
+  last_enquired_at: string | null;
 };
