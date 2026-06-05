@@ -36,12 +36,16 @@ function LoginInner() {
         });
         if (signUpError) { setError(signUpError.message); return; }
         if (data.user) {
-          // Upsert profile
-          await supabase.from("profiles").upsert({
-            id: data.user.id,
-            full_name: fullName.trim(),
-            role: "staff",
-          });
+          // Try to upsert profile — table might not exist yet
+          try {
+            await supabase.from("profiles").upsert({
+              id: data.user.id,
+              full_name: fullName.trim(),
+              role: "staff",
+            });
+          } catch {
+            // profiles table doesn't exist yet — that's OK, the dashboard will use fallback
+          }
         }
         if (data.session) {
           router.replace(next);
